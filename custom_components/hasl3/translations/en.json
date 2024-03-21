@@ -15,19 +15,16 @@
 					"scan_interval": "How many seconds between refresh",
 					"sensor": "Only update if this binary sensor is True (empty=always update)",
 
-                    "ri4key": "Realtidsinformation 4 API Key",
                     "siteid": "Location ID",
-					"direction": "Direction",
+					"siteids": "Location IDs (comma separated list)",
+
+                    "line": "Line",
+					"lines": "Lines (comma separated list)",
+
+                    "direction": "Direction",
 					"property": "Sensor primary property",
 					"timewindow": "How long into the future (5-60 min)",
 
-                    "si2key": "Störningsinformation 2 API Key",
-					"lines": "Lines (comma separated list)",
-					"stops": "Location IDs (comma separated list)",
-
-                    "tl2key": "Trafikläget 2 API Key",
-					"analog": "Create sensors instead of binary_sensors (not recommended)",
-					
                     "rp3key": "Reseplaneraren 3.1 API Key",
                     "from": "From as Location ID or Longlat-pair (59.33258,18.0649)",
 					"to": "Destination as Location ID or Longlat-pair (59.33258,18.0649)",
@@ -45,15 +42,20 @@
                     "fptb1": "Gröna Linjen",
                     "fptb2": "Röda linjen",
                     "fptb3": "Blåa linjen",
+                    "transport": "Transport filter",
+                    "transports": "Transport filter (Multiple)",
 
                     "metro": "Subway",
                     "train": "Commuter trains",
                     "local": "Local trains",
                     "tram": "Trams",
                     "bus": "Buses",
-                    "ferry": "Ferries"                    
+                    "ferry": "Ferries"
 				}
             }
+        },
+        "error": {
+            "only_one_status_sensor": "Only one Sensor of type Status is allowed"
         }
     },
     "options": {
@@ -64,19 +66,16 @@
 					"scan_interval": "How many seconds between refresh",
 					"sensor": "Only update if this binary sensor is True (empty=always update)",
 
-                    "ri4key": "Realtidsinformation 4 API Key",
                     "siteid": "Location ID",
+					"siteids": "Location IDs (comma separated list)",
+
+                    "line": "Line",
+					"lines": "Lines (comma separated list)",
+
 					"direction": "Direction",
 					"property": "Sensor primary property",
 					"timewindow": "How long into the future (5-60 min)",
 
-                    "si2key": "Störningsinformation 2 API Key",
-					"lines": "Lines (comma separated list)",
-					"stops": "Location IDs (comma separated list)",
-
-                    "tl2key": "Trafikläget 2 API Key",
-					"analog": "Create sensors instead of binary_sensors (not recommended)",
-					
                     "rp3key": "Reseplaneraren 3.1 API Key",
                     "from": "From as Location ID or Longlat-pair (59.33258,18.0649)",
 					"to": "Destination as Location ID or Longlat-pair (59.33258,18.0649)",
@@ -94,14 +93,42 @@
                     "fptb1": "Gröna Linjen",
                     "fptb2": "Röda linjen",
                     "fptb3": "Blåa linjen",
+                    "transport": "Transport filter",
+                    "transports": "Transport filter (Multiple)",
 
                     "metro": "Subway",
                     "train": "Commuter trains",
                     "local": "Local trains",
                     "tram": "Trams",
                     "bus": "Buses",
-                    "ferry": "Ferries"                    
+                    "ferry": "Ferries"
 				}
+            }
+        }
+    },
+    "selector": {
+        "type": {
+            "options": {
+                "departure_v2": "SL Trafik Departures",
+                "status_v2": "SL Traffic Status"
+            }
+        },
+        "transport": {
+            "options": {
+                "BUS": "Bus",
+                "METRO": "Subway",
+                "TRAM": "Tram",
+                "TRAIN": "Train",
+                "SHIP": "Ship",
+                "FETTRY": "Ferry",
+                "TAXI": "Taxi"
+            }
+        },
+        "direction": {
+            "options": {
+                "0": "Any",
+                "1": "Left",
+                "2": "Right"
             }
         }
     }

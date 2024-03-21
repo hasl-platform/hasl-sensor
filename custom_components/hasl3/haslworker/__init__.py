@@ -1,25 +1,13 @@
-import logging
-import jsonpickle
-import isodate
-import time
 
+import logging
 from datetime import datetime
+
+import isodate
+from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import now
 
-from custom_components.hasl3.slapi import (
-    slapi_fp,
-    slapi_tl2,
-    slapi_ri4,
-    slapi_si2,
-    slapi_rp3,
-)
-
-from custom_components.hasl3.rrapi import (
-    rrapi_rra,
-    rrapi_rrd,
-    rrapi_rrr
-)
-
+from custom_components.hasl3.rrapi import rrapi_rra, rrapi_rrd, rrapi_rrr
+from custom_components.hasl3.slapi import slapi_fp, slapi_rp3
 
 logger = logging.getLogger("custom_components.hasl3.worker")
 
@@ -29,15 +17,9 @@ class HASLStatus(object):
     startup_in_progress = True
     running_background_tasks = False
 
-
 class HASLData(object):
-    tl2 = {}
-    si2 = {}
-    ri4 = {}
     rp3 = {}
     rp3keys = {}
-    si2keys = {}
-    ri4keys = {}
     rrd = {}
     rra = {}
     rrr = {}
@@ -46,12 +28,7 @@ class HASLData(object):
 
     def dump(self):
         return {
-            'si2keys': self.si2keys,
-            'ri4keys': self.ri4keys,
             'rrkeys': self.rrkeys,
-            'tl2': self.tl2,
-            'si2': self.si2,
-            'ri4': self.ri4,
             'fp': self.fp,
             'rrd': self.rrd,
             'rra': self.rra,
@@ -87,29 +64,14 @@ class HASLInstances(object):
 class HaslWorker(object):
     """HaslWorker."""
 
-    hass = None
-    configuration = None
+    hass: HomeAssistant | None = None
+
     status = HASLStatus()
     data = HASLData()
     instances = HASLInstances()
 
-    @staticmethod
-    def init(hass, configuration):
-        """Return a initialized HaslWorker object."""
-        return HaslWorker()
-
-    def debugdump(self, data):
-        logger.debug("[debug_dump] Entered")
-
-        try:
-            timestring = time.strftime("%Y%m%d%H%M%S")
-            outputfile = self.hass.config.path(f"hasl_debug_{timestring}.json")
-            jsonFile = open(outputfile, "w")
-            jsonFile.write(jsonpickle.dumps(data, unpicklable=False))
-            jsonFile.close()
-            logger.debug("[debug_dump] Completed")
-        except:
-            logger.debug("[debug_dump] A processing error occurred")
+    def __init__(self, hass: HomeAssistant):
+        self.hass = hass
 
     def getminutesdiff(self, d1, d2):
         d1 = datetime.strptime(d1, "%Y-%m-%d %H:%M:%S")
@@ -160,7 +122,7 @@ class HaslWorker(object):
         if listvalue not in self.data.rp3:
             logger.debug("[assert_rp3] Creating default values")
             self.data.rp3[listvalue] = {
-                "api_type": "slapi-si2",
+                "api_type": "slapi-rp3",
                 "api_lastrun": '1970-01-01 01:01:01',
                 "api_result": "Pending",
                 "trips": []
@@ -364,150 +326,6 @@ class HaslWorker(object):
             self.data.fp[traintype] = newdata
         logger.debug("[process_rp3] Completed")
 
-    async def assert_si2_stop(self, key, stop):
-        await self.assert_si2(key, f"stop_{stop}", "stops", stop)
-
-    async def assert_si2_line(self, key, line):
-        await self.assert_si2(key, f"line_{line}", "lines", line)
-
-    async def assert_si2(self, key, datakey, listkey, listvalue):
-        logger.debug("[assert_si2] Entered")
-
-        if key not in self.data.si2keys:
-            logger.debug("[assert_si2] Registering key")
-            self.data.si2keys[key] = {
-                "api_key": key,
-                "stops": "",
-                "lines": ""
-            }
-        else:
-            logger.debug("[assert_si2] Key already present")
-
-        if self.data.si2keys[key][listkey] == "":
-            logger.debug("[assert_si2] Creating trip key")
-            self.data.si2keys[key][listkey] = listvalue
-        else:
-            logger.debug("[assert_si2] Appending to trip key")
-            self.data.si2keys[key][listkey] = f"{self.data.si2keys[key][listkey]},{listvalue}"
-
-        if datakey not in self.data.si2:
-            logger.debug("[assert_si2] Creating default values")
-            self.data.si2[datakey] = {
-                "api_type": "slapi-si2",
-                "api_lastrun": '1970-01-01 01:01:01',
-                "api_result": "Pending"
-            }
-
-        logger.debug("[assert_si2] Completed")
-        return
-
-    async def process_si2(self, notarealarg=None):
-        logger.debug("[process_si2] Entered")
-
-        for si2key in list(self.data.si2keys):
-            logger.debug(f"[process_si2] Processing key {si2key}")
-            si2data = self.data.si2keys[si2key]
-            api = slapi_si2(si2key, 60)
-            for stop in ','.join(set(si2data["stops"].split(','))).split(','):
-                logger.debug(f"[process_si2] Processing stop {stop}")
-                newdata = self.data.si2[f"stop_{stop}"]
-                # TODO: CHECK FOR FRESHNESS TO NOT KILL OFF THE KEYS
-
-                try:
-                    deviationdata = await api.request(stop, '')
-                    deviationdata = deviationdata['ResponseData']
-
-                    deviations = []
-                    for (idx, value) in enumerate(deviationdata):
-                        deviations.append({
-                            'updated': value['Updated'],
-                            'title': value['Header'],
-                            'fromDate': value['FromDateTime'],
-                            'toDate': value['UpToDateTime'],
-                            'details': value['Details'],
-                            'sortOrder': value['SortOrder'],
-                        })
-
-                    newdata['data'] = sorted(deviations,
-                                             key=lambda k: k['sortOrder'])
-                    newdata['attribution'] = "Stockholms Lokaltrafik"
-                    newdata['last_updated'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                    newdata['api_result'] = "Success"
-                    logger.debug(f"[process_si2] Processing stop {stop} completed")
-                except Exception as e:
-                    newdata['api_result'] = "Error"
-                    newdata['api_error'] = str(e)
-                    logger.debug(f"[process_si2] An error occurred during processing of stop {stop}")
-
-                newdata['api_lastrun'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                self.data.si2[f"stop_{stop}"] = newdata
-                logger.debug(
-                    f"[process_si2] Completed processing of stop {stop}")
-
-            for line in ','.join(set(si2data["lines"].split(','))).split(','):
-                logger.debug(f"[process_si2] Processing line {line}")
-                newdata = self.data.si2[f"line_{line}"]
-                # TODO: CHECK FOR FRESHNESS TO NOT KILL OFF THE KEYS
-
-                try:
-                    deviationdata = await api.request('', line)
-                    deviationdata = deviationdata['ResponseData']
-
-                    deviations = []
-                    for (idx, value) in enumerate(deviationdata):
-                        deviations.append({
-                            'updated': value['Updated'],
-                            'title': value['Header'],
-                            'fromDate': value['FromDateTime'],
-                            'toDate': value['UpToDateTime'],
-                            'details': value['Details'],
-                            'sortOrder': value['SortOrder'],
-                        })
-
-                    newdata['data'] = sorted(deviations, key=lambda k: k['sortOrder'])
-                    newdata['attribution'] = "Stockholms Lokaltrafik"
-                    newdata['last_updated'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                    newdata['api_result'] = "Success"
-                    logger.debug(f"[process_si2] Processing line {line} completed")
-                except Exception as e:
-                    newdata['api_result'] = "Error"
-                    newdata['api_error'] = str(e)
-                    logger.debug(f"[process_si2] An error occurred during processing of line {line}")
-
-                newdata['api_lastrun'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                self.data.si2[f"line_{line}"] = newdata
-                logger.debug(f"[process_si2] Completed processing of line {line}")
-
-            logger.debug(f"[process_si2] Completed processing key {si2key}")
-
-        logger.debug("[process_si2] Completed")
-        return
-
-    async def assert_ri4(self, key, stop):
-        logger.debug("[assert_ri4] Entered")
-        stopkey = str(stop)
-
-        if key not in self.data.ri4keys:
-            logger.debug("[assert_ri4] Registering key and stop")
-            self.data.ri4keys[key] = {
-                "api_key": key,
-                "stops": stopkey
-            }
-        else:
-            logger.debug("[assert_ri4] Adding stop to existing key")
-            self.data.ri4keys[key]["stops"] = f"{self.data.ri4keys[key]['stops']},{stopkey}"
-
-        if stop not in self.data.ri4:
-            logger.debug("[assert_ri4] Creating default data")
-            self.data.ri4[stopkey] = {
-                "api_type": "slapi-ri4",
-                "api_lastrun": '1970-01-01 01:01:01',
-                "api_result": "Pending"
-            }
-
-        logger.debug("[assert_ri4] Completed")
-        return
-
     async def assert_rrd(self, key, stop):
         logger.debug("[assert_rrd] Entered")
         stopkey = str(stop)
@@ -534,7 +352,7 @@ class HaslWorker(object):
             }
 
         logger.debug("[assert_rrd] Completed")
-        return     
+        return
 
     async def assert_rra(self, key, stop):
         logger.debug("[assert_rra] Entered")
@@ -596,7 +414,7 @@ class HaslWorker(object):
             }
 
         logger.debug("[assert_rp3] Completed")
-        return      
+        return
 
     async def process_rrd(self, notarealarg=None):
         logger.debug("[process_rrd] Entered")
@@ -654,7 +472,7 @@ class HaslWorker(object):
                             'expected': expected,
                             'type': value["ProductAtStop"]["catOut"],
                             'icon': iconswitcher.get(value["ProductAtStop"]["catOut"],'mdi:train-car'),
-                        })                    
+                        })
 
                     newdata['data'] = sorted(departures,
                                                 key=lambda k: k['time'])
@@ -674,9 +492,9 @@ class HaslWorker(object):
                 logger.debug(f"[process_rrd] Completed stop {stop}")
 
             logger.debug(f"[process_rrd] Completed key {rrkey}")
- 
+
         logger.debug("[process_rrd] Completed")
-        return      
+        return
 
     async def process_rra(self, notarealarg=None):
         logger.debug("[process_rra] Entered")
@@ -735,7 +553,7 @@ class HaslWorker(object):
                             'expected': expected,
                             'type': value["ProductAtStop"]["catOut"],
                             'icon': iconswitcher.get(value["ProductAtStop"]["catOut"],'mdi:train-car'),
-                        })                    
+                        })
 
                     newdata['data'] = sorted(arrivals,
                                                 key=lambda k: k['time'])
@@ -755,9 +573,9 @@ class HaslWorker(object):
                 logger.debug(f"[process_rra] Completed stop {stop}")
 
             logger.debug(f"[process_rra] Completed key {rrkey}")
- 
+
         logger.debug("[process_rra] Completed")
-        return 
+        return
 
     async def process_rrr(self):
         logger.debug("[process_rrr] Entered")
@@ -785,7 +603,7 @@ class HaslWorker(object):
                         newtrip = {
                             'legs': []
                         }
-                    
+
                         # Add legs to trips
                         for leg in trip['LegList']['Leg']:
                             newleg = {}
@@ -799,15 +617,15 @@ class HaslWorker(object):
                             newleg['from'] = leg['Origin']['name']
                             newleg['to'] = leg['Destination']['name']
                             newleg['time'] = f"{leg['Origin']['date']} {leg['Origin']['time']}"
-                    
+
                             if leg.get('Stops'):
                                 if leg['Stops'].get('Stop', {}):
                                     newleg['stops'] = []
                                     for stop in leg.get('Stops', {}).get('Stop', {}):
                                         newleg['stops'].append(stop)
-                    
+
                             newtrip['legs'].append(newleg)
-                    
+
                         # Make some shortcuts for data
                         newtrip['first_leg'] = newtrip['legs'][0]['name']
                         newtrip['time'] = newtrip['legs'][0]['time']
@@ -856,159 +674,3 @@ class HaslWorker(object):
             logger.debug(f"[process_rrr] Completed key {rrkey}")
 
         logger.debug("[process_rrr] Completed")
-
-
-    async def process_ri4(self, notarealarg=None):
-        logger.debug("[process_ri4] Entered")
-
-        iconswitcher = {
-            'Buses': 'mdi:bus',
-            'Trams': 'mdi:tram',
-            'Ships': 'mdi:ferry',
-            'Metros': 'mdi:subway-variant',
-            'Trains': 'mdi:train',
-        }
-
-        for ri4key in list(self.data.ri4keys):
-            logger.debug(f"[process_ri4] Processing key {ri4key}")
-            ri4data = self.data.ri4keys[ri4key]
-            api = slapi_ri4(ri4key, 60)
-            for stop in ','.join(set(ri4data["stops"].split(','))).split(','):
-                logger.debug(f"[process_ri4] Processing stop {stop}")
-                newdata = self.data.ri4[stop]
-                # TODO: CHECK FOR FRESHNESS TO NOT KILL OFF THE KEYS
-
-                try:
-                    departures = []
-                    departuredata = await api.request(stop)
-                    departuredata = departuredata['ResponseData']
-
-                    for (i, traffictype) in enumerate(['Metros',
-                                                       'Buses',
-                                                       'Trains',
-                                                       'Trams',
-                                                       'Ships']):
-
-                        for (idx, value) in enumerate(
-                                departuredata[traffictype]):
-                            direction = value['JourneyDirection'] or 0
-                            displaytime = value['DisplayTime'] or ''
-                            destination = value['Destination'] or ''
-                            linenumber = value['LineNumber'] or ''
-                            expected = value['ExpectedDateTime'] or ''
-                            groupofline = value['GroupOfLine'] or ''
-                            icon = iconswitcher.get(traffictype,
-                                                    'mdi:train-car')
-                            diff = self.parseDepartureTime(displaytime)
-                            departures.append({
-                                'line': linenumber,
-                                'direction': direction,
-                                'departure': displaytime,
-                                'destination': destination,
-                                'time': diff,
-                                'expected': datetime.strptime(
-                                    expected, '%Y-%m-%dT%H:%M:%S'
-                                ),
-                                'type': traffictype,
-                                'groupofline': groupofline,
-                                'icon': icon,
-                            })
-
-                    newdata['data'] = sorted(departures,
-                                             key=lambda k: k['time'])
-                    newdata['attribution'] = "Stockholms Lokaltrafik"
-                    newdata['last_updated'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                    newdata['api_result'] = "Success"
-                    logger.debug(f"[process_ri4] Stop {stop} updated successfully")
-                except Exception as e:
-                    newdata['api_result'] = "Error"
-                    newdata['api_error'] = str(e)
-                    logger.debug(f"[process_ri4] Error occurred during update {stop}")
-
-                newdata['api_lastrun'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                self.data.ri4[stop] = newdata
-                logger.debug(f"[process_ri4] Completed stop {stop}")
-
-            logger.debug(f"[process_ri4] Completed key {ri4key}")
-
-        logger.debug("[process_ri4] Completed")
-        return
-
-    async def assert_tl2(self, key):
-        logger.debug("[assert_tl2] Entered")
-
-        if key not in self.data.tl2:
-            logger.debug("[assert_tl2] Registering key")
-            self.data.tl2[key] = {
-                "api_type": "slapi-tl2",
-                "api_lastrun": '1970-01-01 01:01:01',
-                "api_result": "Pending"
-            }
-        else:
-            logger.debug("[assert_tl2] Key already present")
-
-        logger.debug("[assert_tl2] Completed")
-        return
-
-    async def process_tl2(self, notarealarg=None):
-        logger.debug("[process_tl2] Entered")
-
-        for tl2key in list(self.data.tl2):
-            logger.debug(f"[process_tl2] Processing {tl2key}")
-
-            newdata = self.data.tl2[tl2key]
-
-            statuses = {
-                'EventGood': 'Good',
-                'EventMinor': 'Minor',
-                'EventMajor': 'Closed',
-                'EventPlanned': 'Planned',
-            }
-
-            # Icon table used for HomeAssistant.
-            statusIcons = {
-                'EventGood': 'mdi:check',
-                'EventMinor': 'mdi:clock-alert-outline',
-                'EventMajor': 'mdi:close',
-                'EventPlanned': 'mdi:triangle-outline'
-            }
-
-            try:
-
-                api = slapi_tl2(tl2key)
-                apidata = await api.request()
-                apidata = apidata['ResponseData']['TrafficTypes']
-
-                responselist = {}
-                for response in apidata:
-                    statustype = ('ferry' if response['Type'] == 'fer' else response['Type'])
-
-                    for event in response['Events']:
-                        event['Status'] = statuses.get(event['StatusIcon'])
-                        event['StatusIcon'] = \
-                            statusIcons.get(event['StatusIcon'])
-
-                    responsedata = {
-                        'status': statuses.get(response['StatusIcon']),
-                        'status_icon': statusIcons.get(response['StatusIcon']),
-                        'events': response['Events']
-                    }
-                    responselist[statustype] = responsedata
-
-                # Attribution and update sensor data.
-                newdata['data'] = responselist
-                newdata['attribution'] = "Stockholms Lokaltrafik"
-                newdata['last_updated'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                newdata['api_result'] = "Success"
-                logger.debug(f"[process_tl2] Update of {tl2key} succeeded")
-            except Exception as e:
-                newdata['api_result'] = "Error"
-                newdata['api_error'] = str(e)
-                logger.debug(f"[process_tl2] Update of {tl2key} failed")
-
-            newdata['api_lastrun'] = now().strftime('%Y-%m-%d %H:%M:%S')
-            self.data.tl2[tl2key] = newdata
-            logger.debug(f"[process_tl2] Completed {tl2key}")
-
-        logger.debug("[process_tl2] Completed")
-        return
