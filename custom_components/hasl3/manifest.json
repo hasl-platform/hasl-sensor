@@ -17,6 +17,6 @@
 	  "httpx>0.12.1",
 	  "jsonpickle>2.0.0",
 	  "isodate>0.6.0",
-    "trafiklab-sl>=0.2.0"
+    "trafiklab-sl>=1.0.0"
   ]
 }

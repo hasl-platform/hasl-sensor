@@ -7,6 +7,10 @@
                 "data": {
                     "name": "Integration friendly name",
                     "sensortype": "Which kind of integration?"
+                },
+                "menu_options": {
+                    "lookup_location": "Lookup Location",
+                    "config": "Configure manually"
                 }
             },
             "config": {
