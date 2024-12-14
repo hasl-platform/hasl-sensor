@@ -3,6 +3,7 @@
 from asyncio import timeout
 from datetime import timedelta
 import logging
+from typing import TYPE_CHECKING
 
 from tsl.clients.transport import TransportClient
 from tsl.models.departures import SiteDepartureResponse, TransportMode
@@ -180,8 +181,16 @@ class BaseDepartureSensor(
     ):
         super().__init__(coordinator)
 
+        if TYPE_CHECKING:
+            assert entry.unique_id
+
         self._attr_unique_id = f"{entry.unique_id}_{self.entity_description.key}"
-        self._attr_device_info = coordinator.device_info
+
+        device_info = coordinator.device_info.copy()
+        device_info["identifiers"] = {(const.DOMAIN, entry.unique_id)}
+        device_info["name"] = entry.title
+
+        self._attr_device_info = device_info
 
     def _next_departure(self):
         if not self.coordinator.data:
