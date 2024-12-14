@@ -1,6 +1,7 @@
 {
   "codeowners": [
-	  "@DSorlov"
+	  "@DSorlov",
+    "@Necrokote"
   ],
   "domain": "hasl3",
   "name": "Swedish Public Transport Sensor (HASL)",
