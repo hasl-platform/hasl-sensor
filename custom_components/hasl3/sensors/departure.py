@@ -187,7 +187,7 @@ class BaseDepartureSensor(
     ):
         super().__init__(entry.runtime_data)
 
-        self._attr_unique_id = f"{entry.unique_id}_{self.entity_description.key}"
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_description.key}"
         self._attr_device_info = self.coordinator.device_info
 
     def _next_departure(self):
