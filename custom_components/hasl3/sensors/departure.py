@@ -93,9 +93,9 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     sensors = [
-        DeparturesSensor(entry, coordinator),
-        DeviationsSensor(entry, coordinator),
-        NextDepartureSensor(entry, coordinator),
+        DeparturesSensor(entry),
+        DeviationsSensor(entry),
+        NextDepartureSensor(entry),
     ]
 
     async_add_entities(sensors)
@@ -134,7 +134,14 @@ class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse
         self._sensor_id: str | None = config_entry.options.get(const.CONF_SENSOR)
         interval = timedelta(seconds=config_entry.options[const.CONF_SCAN_INTERVAL])
 
-        self.device_info = SL_TRAFFIK_DEVICE_INFO
+
+        if TYPE_CHECKING:
+            assert config_entry.unique_id
+
+        device_info = SL_TRAFFIK_DEVICE_INFO.copy()
+        device_info["identifiers"] = {(const.DOMAIN, config_entry.entry_id)}
+        device_info["name"] = config_entry.title
+        self.device_info = device_info
 
         super().__init__(
             hass,
@@ -144,7 +151,7 @@ class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse
             update_interval=interval,
         )
 
-    async def _async_update_data(self) -> SiteDepartureResponse:
+    async def _async_update_data(self):
         """Update data via library."""
 
         if self._sensor_id and not self.hass.states.is_state(self._sensor_id, STATE_ON):
@@ -176,21 +183,12 @@ class BaseDepartureSensor(
 
     def __init__(
         self,
-        entry: ConfigEntry,
-        coordinator: DepartureDataUpdateCoordinator,
+        entry: ConfigEntry[DepartureDataUpdateCoordinator],
     ):
-        super().__init__(coordinator)
-
-        if TYPE_CHECKING:
-            assert entry.unique_id
+        super().__init__(entry.runtime_data)
 
         self._attr_unique_id = f"{entry.unique_id}_{self.entity_description.key}"
-
-        device_info = coordinator.device_info.copy()
-        device_info["identifiers"] = {(const.DOMAIN, entry.unique_id)}
-        device_info["name"] = entry.title
-
-        self._attr_device_info = device_info
+        self._attr_device_info = self.coordinator.device_info
 
     def _next_departure(self):
         if not self.coordinator.data:
