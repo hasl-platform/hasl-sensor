@@ -3,14 +3,36 @@
     "config": {
         "step": {
             "user": {
-                "description": "Enter a friendly name for your integration to get started.",
-                "data": {
-                    "name": "Integration friendly name",
-                    "sensortype": "Which kind of integration?"
-                },
+                "description": "Select integration type",
                 "menu_options": {
-                    "lookup_location": "Lookup Location",
-                    "config": "Configure manually"
+                    "departure_v2": "SL Trafik Departures",
+                    "status_v2": "SL Traffic Status",
+                    "Resrobot Departures": "Resrobot Departures",
+                    "Resrobot Arrivals": "Resrobot Arrivals",
+                    "Resrobot Route Sensor": "Resrobot Route Sensor",
+                    "SL Vehicle Locations": "SL Vehicle Locations",
+                    "SL Route Sensor": "SL Route Sensor"
+                }
+            },
+            "departure_v2": {
+                "description": "How do you want to proceed ?",
+                "menu_options": {
+                    "lookup_location": "Find location",
+                    "name": "Configure manually"
+                }
+            },
+            "lookup_location": {
+                "description": "Find stop using SL Stop lookup API",
+                "data": {
+                    "lookup_api_key": "\"Platsuppslag\" api key",
+                    "lookup_search_key": "Search query",
+                    "siteid": "Location"
+                }
+            },
+            "name": {
+                "description": "Friendly name for the sensor",
+                "data": {
+                    "name": "Name"
                 }
             },
             "config": {
@@ -59,6 +81,7 @@
             }
         },
         "error": {
+            "lookup_failed": "Failed to lookup location using given key. Check the key and try again.",
             "only_one_status_sensor": "Only one Sensor of type Status is allowed"
         }
     },
@@ -111,12 +134,6 @@
         }
     },
     "selector": {
-        "type": {
-            "options": {
-                "departure_v2": "SL Trafik Departures",
-                "status_v2": "SL Traffic Status"
-            }
-        },
         "transport": {
             "options": {
                 "BUS": "Bus",

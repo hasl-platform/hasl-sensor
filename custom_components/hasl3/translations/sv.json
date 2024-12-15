@@ -3,10 +3,36 @@
     "config": {
         "step": {
             "user": {
-                "description": "Ange ett namn för denna integration",
+                "description": "Välj integrations typ",
+                "menu_options": {
+                    "departure_v2": "SL Trafik Departures",
+                    "status_v2": "SL Traffic Status",
+                    "Resrobot Departures": "Resrobot Departures",
+                    "Resrobot Arrivals": "Resrobot Arrivals",
+                    "Resrobot Route Sensor": "Resrobot Route Sensor",
+                    "SL Vehicle Locations": "SL Vehicle Locations",
+                    "SL Route Sensor": "SL Route Sensor"
+                }
+            },
+            "departure_v2": {
+                "description": "Hur vill du fortsätta?",
+                "menu_options": {
+                    "lookup_location": "Hitta plats",
+                    "name": "Konfigurera manuellt"
+                }
+            },
+            "lookup_location": {
+                "description": "Hitta hållplats med SL Stop lookup API",
                 "data": {
-                    "name": "Namn på integrationen",
-                    "sensortype": "Vilken sorts integration är det?"
+                    "lookup_api_key": "\"Platsuppslag\" api nyckel",
+                    "lookup_search_key": "Sökfråga",
+                    "siteid": "Plats"
+                }
+            },
+            "name": {
+                "description": "Vänligt namn för sensorn",
+                "data": {
+                    "name": "Namn"
                 }
             },
             "config": {
@@ -92,6 +118,26 @@
                     "bus": "Bussar",
                     "ferry": "Färjor"
 				}
+            }
+        }
+    },
+    "selector": {
+        "transport": {
+            "options": {
+                "BUS": "Buss",
+                "METRO": "Tunnelbana",
+                "TRAM": "Spårvagn",
+                "TRAIN": "Tåg",
+                "SHIP": "Båt",
+                "FETTRY": "Färja",
+                "TAXI": "Taxi"
+            }
+        },
+        "direction": {
+            "options": {
+                "0": "Båda",
+                "1": "Vänster",
+                "2": "Höger"
             }
         }
     }
