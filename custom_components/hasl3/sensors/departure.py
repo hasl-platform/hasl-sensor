@@ -236,7 +236,6 @@ class DeviationsSensor(BaseDepartureSensor):
         entity_category=EntityCategory.DIAGNOSTIC,
         has_entity_name=True,
         name="Stop deviations",
-        entity_registry_enabled_default=False,
     )
 
     _unrecorded_attributes = frozenset({"deviations"})
@@ -264,7 +263,6 @@ class NextDepartureSensor(BaseDepartureSensor):
         name="Next Departure",
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=SensorDeviceClass.TIMESTAMP,
-        entity_registry_enabled_default=False,
     )
 
     @property
