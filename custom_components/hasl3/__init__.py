@@ -4,7 +4,7 @@ from custom_components.hasl3.haslworker import HaslWorker
 from custom_components.hasl3.rrapi import rrapi_sl
 from custom_components.hasl3.slapi import slapi_pu1, slapi_rp3
 
-from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.components.sensor.const import DOMAIN as SENSOR_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, ServiceCall
 
@@ -307,6 +307,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     unload_ok = await hass.config_entries.async_unload_platforms(entry, [SENSOR_DOMAIN])
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok

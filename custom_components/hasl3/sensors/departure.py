@@ -2,24 +2,21 @@
 
 from asyncio import timeout
 from datetime import timedelta
-from enum import StrEnum
 import logging
-import math
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING
 
-from aiohttp import ClientSession
 from tsl.clients.transport import TransportClient
 from tsl.models.departures import SiteDepartureResponse, TransportMode
 import voluptuous as vol
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
 )
+from homeassistant.components.sensor.const import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_ON
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import STATE_ON, EntityCategory
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector as sel
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -27,12 +24,9 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
-from homeassistant.util.dt import now
 
 from .. import const
 from .device import SL_TRAFFIK_DEVICE_INFO
-
-logger = logging.getLogger(f"custom_components.{const.DOMAIN}.sensors.departure")
 
 
 CONFIG_SCHEMA = vol.Schema(
@@ -79,16 +73,6 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 
-class DepartureKey(NamedTuple):
-    """DepartureKey."""
-
-    siteid: int
-    transport: str | None
-    direction: int | None
-    forecast: int | None
-    line: int | None
-
-
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update listener."""
     await hass.config_entries.async_reload(entry.entry_id)
@@ -101,38 +85,17 @@ async def async_setup_entry(
 ):
     """Set up the sensor platform."""
 
-    websession = async_get_clientsession(hass)
-
-    def _int_or_none(v) -> None | int:
-        if v is None:
-            return v
-
-        return int(v) or None
-
-    key = DepartureKey(
-        siteid=int(entry.options[const.CONF_SITE_ID]),
-        transport=entry.options.get(const.CONF_TRANSPORT) or None,
-        direction=_int_or_none(entry.options.get(const.CONF_DIRECTION)),
-        forecast=_int_or_none(entry.options.get(const.CONF_TIMEWINDOW)),
-        line=_int_or_none(entry.options.get(const.CONF_LINE)),
-    )
-    interval = timedelta(seconds=entry.options[const.CONF_SCAN_INTERVAL])
-    sensor_id: str | None = entry.options.get(const.CONF_SENSOR)
-
-    coordinator = DepartureDataUpdateCoordinator(
-        hass, websession, key, interval, sensor_id
-    )
+    coordinator = DepartureDataUpdateCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
+    entry.runtime_data = coordinator
 
     # subscribe to updates
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
-    # TODO: use manager to store coordinators
-    hass.data.setdefault(const.DOMAIN, {})[entry.entry_id] = coordinator
-
     sensors = [
-        TrafikDepartureSensor(entry, coordinator, description)
-        for description in DEPARTURE_SENSORS
+        DeparturesSensor(entry),
+        DeviationsSensor(entry),
+        NextDepartureSensor(entry),
     ]
 
     async_add_entities(sensors)
@@ -141,184 +104,170 @@ async def async_setup_entry(
 class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse]):
     """Class to manage fetching Departure data API."""
 
+    config_entry: ConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
-        session: ClientSession,
-        key: DepartureKey,
-        update_interval: timedelta,
-        sensor_id: str | None,
+        config_entry: ConfigEntry,
     ) -> None:
-        """Initialize."""
-        self.key = key
-        self.sensor_id = sensor_id
 
-        self._session = session
-        self.client = TransportClient()
+        def _int_or_none(x):
+            return int(x) if x else None
 
-        self.device_info = SL_TRAFFIK_DEVICE_INFO
+        self._siteid = int(config_entry.options[const.CONF_SITE_ID])
+
+        if transport := config_entry.options.get(const.CONF_TRANSPORT):
+            self._transport = TransportMode(transport)
+        else:
+            self._transport = None
+
+        if direction := _int_or_none(config_entry.options.get(const.CONF_DIRECTION)):
+            self._direction = const.DirectionType(direction)
+        else:
+            self._direction = None
+
+        self._forecast = (
+            _int_or_none(config_entry.options.get(const.CONF_TIMEWINDOW)) or 60
+        )
+        self._line = _int_or_none(config_entry.options.get(const.CONF_LINE))
+        self._sensor_id: str | None = config_entry.options.get(const.CONF_SENSOR)
+        interval = timedelta(seconds=config_entry.options[const.CONF_SCAN_INTERVAL])
+
+
+        if TYPE_CHECKING:
+            assert config_entry.unique_id
+
+        device_info = SL_TRAFFIK_DEVICE_INFO.copy()
+        device_info["identifiers"] = {(const.DOMAIN, config_entry.entry_id)}
+        device_info["name"] = config_entry.title
+        self.device_info = device_info
 
         super().__init__(
-            hass, logger, name=const.DOMAIN, update_interval=update_interval
+            hass,
+            logger=logging.getLogger(__name__),
+            config_entry=config_entry,
+            name=const.DOMAIN,
+            update_interval=interval,
         )
 
-    async def _async_update_data(self) -> SiteDepartureResponse:
+    async def _async_update_data(self):
         """Update data via library."""
 
-        if self.sensor_id and not self.hass.states.is_state(self.sensor_id, STATE_ON):
+        if self._sensor_id and not self.hass.states.is_state(self._sensor_id, STATE_ON):
             self.logger.debug(
                 'Not updating %s. Sensor "%s" is off',
                 self.config_entry.entry_id,
-                self.sensor_id,
+                self._sensor_id,
             )
 
             return self.data
 
-        transport = TransportMode(self.key.transport) if self.key.transport else None
+        client = TransportClient(async_get_clientsession(self.hass))
         async with timeout(10):
-            return await self.client.get_site_departures(
-                self.key.siteid,
-                transport=transport,
-                direction=self.key.direction,
-                line=self.key.line,
-                forecast=self.key.forecast,
-                session=self._session,
+            data = await client.get_site_departures(
+                self._siteid,
+                transport=self._transport,
+                direction=self._direction.value if self._direction else None,
+                line=self._line,
+                forecast=self._forecast,
             )
+            return data
 
 
-class SensorEntityType(StrEnum):
-    """SensorEntityType type."""
-
-    DEPARTURES = "departures"
-    DEVIATIONS = "deviations"
-    MINIMUM = "min"
-    TIME = "time"
-
-
-DEPARTURE_SENSORS = (
-    # main sensor. contains 'departures' attribute with raw data
-    SensorEntityDescription(
-        key=SensorEntityType.DEPARTURES,
-        icon="mdi:train",
-    ),
-    # secondary sensor. contains 'deviations' attribute with raw data
-    SensorEntityDescription(
-        key=SensorEntityType.DEVIATIONS,
-        icon="mdi:alert",
-        entity_registry_enabled_default=False,
-    ),
-    SensorEntityDescription(
-        key=SensorEntityType.MINIMUM,
-        icon="mdi:clock",
-        native_unit_of_measurement="min",
-        entity_registry_enabled_default=False,
-    ),
-    SensorEntityDescription(
-        key=SensorEntityType.TIME,
-        icon="mdi:clock",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        entity_registry_enabled_default=False,
-    ),
-)
-
-
-class TrafikDepartureSensor(
-    CoordinatorEntity[DepartureDataUpdateCoordinator], SensorEntity
+class BaseDepartureSensor(
+    CoordinatorEntity[DepartureDataUpdateCoordinator],
+    SensorEntity,
 ):
-    """Trafik Departure Sensor class."""
-
-    # exclude heavy attributes from recorder
-    _unrecorded_attributes = frozenset({"departures", "deviations"})
-
     _attr_attribution = "Stockholm Lokaltrafik"
-    _attr_has_entity_name = True
-
-    entity_description: SensorEntityDescription
 
     def __init__(
         self,
-        entry: ConfigEntry,
-        coordinator: DepartureDataUpdateCoordinator,
-        description: SensorEntityDescription,
-    ) -> None:
-        """Initialize."""
-        super().__init__(coordinator)
+        entry: ConfigEntry[DepartureDataUpdateCoordinator],
+    ):
+        super().__init__(entry.runtime_data)
 
-        self.entity_description = description
-        self._sensor_data = coordinator.data
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_description.key}"
+        self._attr_device_info = self.coordinator.device_info
 
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = coordinator.device_info
-
-    def _nextDeparture(self):
-        if not self._sensor_data:
+    def _next_departure(self):
+        if not self.coordinator.data:
             return None
 
         departures = sorted(
-            self._sensor_data.departures, key=lambda x: x.expected or x.scheduled
+            self.coordinator.data.departures, key=lambda x: x.expected or x.scheduled
         )
         return next(iter(departures), None)
 
-    @property
-    def name(self):
-        if self.entity_description.key == SensorEntityType.DEPARTURES:
-            return "Departures"
-        elif self.entity_description.key == SensorEntityType.DEVIATIONS:
-            return "Stop deviations"
-        elif self.entity_description.key == SensorEntityType.MINIMUM:
-            return "Next Departure in"
-        elif self.entity_description.key == SensorEntityType.TIME:
-            return "Next Departure at"
 
-        return super().name
+class DeparturesSensor(BaseDepartureSensor):
+    _unrecorded_attributes = frozenset({"departures"})
+
+    entity_description = SensorEntityDescription(
+        key="departures",
+        icon="mdi:train",
+        has_entity_name=True,
+        name="Departures",
+    )
 
     @property
-    def native_value(self) -> str | int | float | None:
+    def native_value(self):
         """Return the state."""
 
-        if not self._sensor_data:
+        if not self.coordinator.data:
             return None
 
-        if self.entity_description.key == SensorEntityType.DEPARTURES:
-            return len(self._sensor_data.departures)
-        elif self.entity_description.key == SensorEntityType.DEVIATIONS:
-            return len(self._sensor_data.stop_deviations)
+        return len(self.coordinator.data.departures)
 
-        if not self._sensor_data:
-            return None
-
-        if (departure := self._nextDeparture()) is None:
-            return None
-
-        time = departure.expected or departure.scheduled
-        if self.entity_description.key == SensorEntityType.MINIMUM:
-            delta = time - now()
-            expected_minutes = math.floor(delta.total_seconds() / 60)
-            return str(max(0, expected_minutes))
-
-        elif self.entity_description.key == SensorEntityType.TIME:
-            return time
-
-        return None
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-
-        if not self._sensor_data:
+    def extra_state_attributes(self):
+        if not self.coordinator.data:
             return {}
 
-        # only report extented attributes for main "departures" sensor
-        if self.entity_description.key == SensorEntityType.DEPARTURES:
-            return {"departures": self._sensor_data.departures}
+        return {"departures": self.coordinator.data.departures}
 
-        elif self.entity_description.key == SensorEntityType.DEVIATIONS:
-            return {"deviations": self._sensor_data.stop_deviations}
 
-        return {}
+class DeviationsSensor(BaseDepartureSensor):
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle data update."""
-        self._sensor_data = self.coordinator.data
-        self.async_write_ha_state()
+    entity_description = SensorEntityDescription(
+        key="deviations",
+        icon="mdi:alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        has_entity_name=True,
+        name="Stop deviations",
+    )
+
+    _unrecorded_attributes = frozenset({"deviations"})
+
+    @property
+    def native_value(self):
+        return len(self.coordinator.data.stop_deviations)
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+
+        if not self.coordinator.data:
+            return {}
+
+        return {"deviations": self.coordinator.data.stop_deviations}
+
+
+class NextDepartureSensor(BaseDepartureSensor):
+
+    entity_description = SensorEntityDescription(
+        key="next_departure",
+        icon="mdi:clock",
+        has_entity_name=True,
+        name="Next Departure",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.TIMESTAMP,
+    )
+
+    @property
+    def native_value(self):
+        if (departure := self._next_departure()) is None:
+            return None
+
+        return departure.expected or departure.scheduled

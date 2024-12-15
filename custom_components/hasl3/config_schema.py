@@ -18,8 +18,6 @@ from .const import (
     CONF_FP_TB2,
     CONF_FP_TB3,
     CONF_FP_TVB,
-    CONF_INTEGRATION_TYPE,
-    CONF_LINE,
     CONF_LINES,
     CONF_NAME,
     CONF_RP3_KEY,
@@ -44,21 +42,14 @@ from .const import (
     SENSOR_RRROUTE,
     SENSOR_STATUS,
     SENSOR_VEHICLE_LOCATION,
-    CONF_INTEGRATION_LIST,
 )
 from .sensors.departure import CONFIG_SCHEMA as departure_config_schema
 from .sensors.status import CONFIG_SCHEMA as status_config_schema
 
 
-START_CONFIG_SCHEMA = vol.Schema(
+NAME_CONFIG_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_NAME): selector.TextSelector(),
-        vol.Required(CONF_INTEGRATION_TYPE, default=SENSOR_DEPARTURE): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=CONF_INTEGRATION_LIST,
-                translation_key=CONF_INTEGRATION_TYPE,
-            )
-        ),
+        vol.Required(CONF_NAME): selector.TextSelector()
     }
 )
 
