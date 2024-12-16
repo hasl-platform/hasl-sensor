@@ -24,7 +24,7 @@
             "lookup_location": {
                 "description": "Hitta hållplats med SL Stop lookup API",
                 "data": {
-                    "lookup_api_key": "\"Platsuppslag\" api nyckel",
+                    "lookup_api_key": "\"Trafikverket öppet API\" nyckel",
                     "lookup_search_key": "Sökfråga",
                     "siteid": "Plats"
                 }

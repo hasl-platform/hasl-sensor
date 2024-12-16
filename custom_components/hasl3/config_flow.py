@@ -2,8 +2,8 @@
 
 import logging
 import uuid
-from typing import Any, cast
 from functools import partial
+from typing import Any, cast
 
 import voluptuous as vol
 from homeassistant.config_entries import CONN_CLASS_CLOUD_POLL, ConfigEntry, ConfigFlow
@@ -16,12 +16,13 @@ from homeassistant.helpers.schema_config_entry_flow import (
     SchemaFlowFormStep,
     SchemaOptionsFlowHandler,
 )
+from tsl.clients.common import ClientException
 from tsl.clients.stoplookup import StopLookupClient
 
 from .config_schema import NAME_CONFIG_SCHEMA, schema_by_type
 from .const import (
-    CONF_INTEGRATION_LIST,
     CONF_INTEGRATION_ID,
+    CONF_INTEGRATION_LIST,
     CONF_INTEGRATION_TYPE,
     CONF_SITE_ID,
     DOMAIN,
@@ -75,7 +76,6 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         return SchemaOptionsFlowHandler(config_entry, OPTIONS_FLOW)
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-
         # TODO: add back legacy sensor types
         return self.async_show_menu(
             step_id="user", menu_options=[SENSOR_DEPARTURE, SENSOR_STATUS]
@@ -157,7 +157,7 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
         try:
             stops = await client.get_stops(search_key)
-        except Exception:  # TOOD: catch specific exceptions
+        except ClientException:
             self._options.pop(LOOKUP_API_KEY, None)
             return await self.async_step_lookup_location(
                 {"errors": {"base": "lookup_failed"}}
