@@ -6,13 +6,13 @@ get_cache:
   description: Returns all data downloaded and cached in the HASL worker for manual processing. Response will be triggered as event on the bus (topic is hasl3).
 
 sl_find_location:
-  description: Searches for a SL location id using a freetext string. Response will be triggered as event on the bus (topic is hasl3).
+  description: Searches for a SL location id using a freetext string. Up to 10 results will be returned
   fields:
     api_key:
       name: API Key
       advanced: false
       required: true
-      description: The SL Platsuppslag 1 API key to use for the query
+      description: The "Trafikverket öppet API" key to use for the query
       selector:
         text:
     search_string:
