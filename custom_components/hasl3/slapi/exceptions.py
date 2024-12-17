@@ -1,6 +1,6 @@
 class SLAPI_Error(Exception):
     """Base class for SL exceptions."""
-    def __init__(self, code, message, details):
+    def __init__(self, code, message, details=None):
         self._code = code
         self._message = message
         self._details = details
