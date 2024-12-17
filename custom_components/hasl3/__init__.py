@@ -1,12 +1,12 @@
 import logging
 
-from custom_components.hasl3.haslworker import HaslWorker
-from custom_components.hasl3.rrapi import rrapi_sl
-from custom_components.hasl3.slapi import slapi_pu1, slapi_rp3
-
 from homeassistant.components.sensor.const import DOMAIN as SENSOR_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, ServiceCall
+
+from custom_components.hasl3.haslworker import HaslWorker
+from custom_components.hasl3.rrapi import rrapi_sl
+from custom_components.hasl3.slapi import SLRoutePlanner31TripApi
 
 from .const import (
     CONF_INTEGRATION_ID,
@@ -16,11 +16,15 @@ from .const import (
     SENSOR_ROUTE,
     SENSOR_VEHICLE_LOCATION,
 )
+from .services.sl_find_location import register as register_sl_find_location
+from .services.sl_find_trip_id import register as register_sl_find_trip_id
+from .services.sl_find_trip_pos import register as register_sl_find_trip_pos
 
 logger = logging.getLogger(f"custom_components.{DOMAIN}.core")
 serviceLogger = logging.getLogger(f"custom_components.{DOMAIN}.services")
 
 EventOrService = Event | ServiceCall
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigEntry):
     """Set up HASL integration"""
@@ -39,39 +43,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
         return False
 
     # SERVICE FUNCTIONS
-    async def sl_find_location(service: EventOrService):
-        serviceLogger.debug("[sl_find_location] Entered")
-        search_string = service.data.get("search_string")
-        api_key = service.data.get("api_key")
-
-        serviceLogger.debug(
-            f"[sl_find_location] Looking for '{search_string}' with key {api_key}"
-        )
-
-        try:
-            pu1api = slapi_pu1(api_key)
-            requestResult = await pu1api.request(search_string)
-            serviceLogger.debug("[sl_find_location] Completed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_location",
-                    "state": "success",
-                    "result": requestResult,
-                },
-            )
-
-        except Exception as e:
-            serviceLogger.debug("[sl_find_location] Lookup failed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_location",
-                    "state": "error",
-                    "result": f"Exception occured during execution: {str(e)}",
-                },
-            )
-
     async def rr_find_location(service: EventOrService):
         serviceLogger.debug("[rr_find_location] Entered")
         search_string = service.data.get("search_string")
@@ -105,40 +76,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
                 },
             )
 
-
-    async def sl_find_trip_id(service: EventOrService):
-        serviceLogger.debug("[sl_find_trip_id] Entered")
-        origin = service.data.get("org")
-        destination = service.data.get("dest")
-        api_key = service.data.get("api_key")
-
-        # serviceLogger.debug(f"[sl_Availablefind_trip_id] Finding from '{origin}' to '{destination}' with key {api_key}")
-
-        try:
-            rp3api = slapi_rp3(api_key)
-            requestResult = await rp3api.request(origin, destination, "", "", "", "")
-            serviceLogger.debug("[sl_find_trip_id] Completed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_id",
-                    "state": "success",
-                    "result": requestResult,
-                },
-            )
-
-        except Exception as e:
-            serviceLogger.debug("[sl_find_trip_id] Lookup failed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_id",
-                    "state": "error",
-                    "result": f"Exception occured during execution: {str(e)}",
-                },
-            )
-
-
     async def sl_find_trip_pos(service: EventOrService):
         serviceLogger.debug("[sl_find_trip_pos] Entered")
         olat = service.data.get("orig_lat")
@@ -152,7 +89,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
         )
 
         try:
-            rp3api = slapi_rp3(api_key)
+            rp3api = SLRoutePlanner31TripApi(api_key)
             requestResult = await rp3api.request("", "", olat, olon, dlat, dlon)
             serviceLogger.debug("[sl_find_trip_pos] Completed")
             hass.bus.fire(
@@ -175,15 +112,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
                 },
             )
 
-
     async def eventListener(service: Event):
         serviceLogger.debug("[eventListener] Entered")
 
         command = service.data.get("cmd")
-
-        if command == "sl_find_location":
-            hass.async_add_job(sl_find_location(service))
-            serviceLogger.debug("[eventListener] Dispatched to sl_find_location")
 
         if command == "rr_find_location":
             hass.async_add_job(rr_find_location(service))
@@ -193,17 +125,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
             hass.async_add_job(sl_find_trip_pos(service))
             serviceLogger.debug("[eventListener] Dispatched to sl_find_trip_pos")
 
-        if command == "sl_find_trip_id":
-            hass.async_add_job(sl_find_trip_id(service))
-            serviceLogger.debug("[eventListener] Dispatched to sl_find_trip_id")
-
-
     logger.debug("[setup] Registering services")
     try:
-        hass.services.async_register(DOMAIN, "sl_find_location", sl_find_location)
+        register_sl_find_location(hass)
+        register_sl_find_trip_id(hass)
+        register_sl_find_trip_pos(hass)
         hass.services.async_register(DOMAIN, "rr_find_location", rr_find_location)
-        hass.services.async_register(DOMAIN, "sl_find_trip_pos", sl_find_trip_pos)
-        hass.services.async_register(DOMAIN, "sl_find_trip_id", sl_find_trip_id)
         logger.debug("[setup] Service registration completed")
     except:
         logger.error("[setup] Service registration failed")

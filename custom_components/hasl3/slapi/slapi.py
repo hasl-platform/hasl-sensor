@@ -1,22 +1,14 @@
 import json
-import httpx
-import time
 import logging
+import time
 
-from .exceptions import (
-    SLAPI_Error,
-    SLAPI_HTTP_Error,
-    SLAPI_API_Error
-)
-from .const import (
-    __version__,
-    FORDONSPOSITION_URL,
-    PU1_URL,
-    RP3_URL,
-    USER_AGENT
-)
+import aiohttp
+import httpx
 
-logger = logging.getLogger("custom_components.hasl3.slapi")
+from .const import FORDONSPOSITION_URL, USER_AGENT, __version__
+from .exceptions import SLAPI_Error, SLAPI_HTTP_Error
+
+logger = logging.getLogger(__name__)
 
 
 class slapi_fp(object):
@@ -27,23 +19,36 @@ class slapi_fp(object):
         return __version__
 
     async def request(self, vehicletype):
-
         logger.debug("Will call FP API")
-        if vehicletype not in ('PT', 'RB', 'TVB', 'SB', 'LB',
-                               'SpvC', 'TB1', 'TB2', 'TB3'):
-            raise SLAPI_Error(-1, "Vehicle type is not valid",
-                                  "Must be one of 'PT','RB','TVB','SB',"
-                                  "'LB','SpvC','TB1','TB2','TB3'")
+        if vehicletype not in (
+            "PT",
+            "RB",
+            "TVB",
+            "SB",
+            "LB",
+            "SpvC",
+            "TB1",
+            "TB2",
+            "TB3",
+        ):
+            raise SLAPI_Error(
+                -1,
+                "Vehicle type is not valid",
+                "Must be one of 'PT','RB','TVB','SB'," "'LB','SpvC','TB1','TB2','TB3'",
+            )
 
         try:
             async with httpx.AsyncClient() as client:
-                request = await client.get(FORDONSPOSITION_URL.format(vehicletype,
-                                                                      time.time()),
-                                           headers={"User-agent": USER_AGENT},
-                                           follow_redirects=True,
-                                           timeout=self._timeout)
+                request = await client.get(
+                    FORDONSPOSITION_URL.format(vehicletype, time.time()),
+                    headers={"User-agent": USER_AGENT},
+                    follow_redirects=True,
+                    timeout=self._timeout,
+                )
         except Exception as e:
-            error = SLAPI_HTTP_Error(997, "An HTTP error occurred (Vehicle Locations)", str(e))
+            error = SLAPI_HTTP_Error(
+                997, "An HTTP error occurred (Vehicle Locations)", str(e)
+            )
             logger.debug(e)
             logger.error(error)
             raise error
@@ -52,111 +57,84 @@ class slapi_fp(object):
 
         result = []
 
-        for trip in response['Trips']:
+        for trip in response["Trips"]:
             result.append(trip)
 
         logger.debug("Call completed")
         return result
 
 
-class slapi(object):
+RPTripRequest = (
+    tuple[str | int, str | int]
+    | tuple[str | float, str | float, str | float, str | float]
+)
 
-    def __init__(self, timeout=None):
-        self._timeout = timeout
 
-    def version(self):
-        return __version__
+class SLRoutePlanner31TripApi:
+    """
+    https://www.trafiklab.se/api/trafiklab-apis/sl/route-planner-31/#trip
 
-    async def _get(self, url, api):
+    TODO: move to external library
+    """
 
-        api_errors = {
-            1001: 'No API key supplied in request',
-            1002: 'The supplied API key is not valid',
-            1003: 'Specified API is not valid',
-            1004: 'The API is not available for this key',
-            1005: 'Key exists but is not for requested API',
-            1006: 'Too many request per minute (quota exceeded for key)',
-            1007: 'Too many request per month (quota exceeded for key)',
-            4002: 'Date filter is not valid',
-            5000: 'Parameter invalid',
+    api_errors = {
+        1001: "No API key supplied in request",
+        1002: "The supplied API key is not valid",
+        1003: "Specified API is not valid",
+        1004: "The API is not available for this key",
+        1005: "Key exists but is not for requested API",
+        1006: "Too many request per minute (quota exceeded for key)",
+        1007: "Too many request per month (quota exceeded for key)",
+        4002: "Date filter is not valid",
+        5000: "Parameter invalid",
+    }
+
+    def __init__(self, api_key: str, session: aiohttp.ClientSession):
+        self._api_key = api_key
+        self._session = session
+
+    async def request(
+        self,
+        request: RPTripRequest,
+    ):
+        params = {
+            "key": self._api_key,
+            "Passlist": 1,
         }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url,
-                                        headers={"User-agent": USER_AGENT},
-                                        follow_redirects=True,
-                                        timeout=self._timeout)
-        except Exception as e:
-            error = SLAPI_HTTP_Error(997, f"An HTTP error occurred ({api})", str(e))
-            logger.debug(e)
-            logger.error(error)
-            raise error
-
-        try:
-            jsonResponse = resp.json()
-        except Exception as e:
-            error = SLAPI_API_Error(998, f"A parsing error occurred ({api})", str(e))
-            logger.debug(error)
-            raise error
-
-        if not jsonResponse:
-            error = SLAPI_Error(999, "Internal error", f"jsonResponse is empty ({api})")
-            logger.error(error)
-            raise error
-
-        if 'StatusCode' in jsonResponse:
-
-            if jsonResponse['StatusCode'] == 0:
-                logger.debug("Call completed")
-                return jsonResponse
-
-            apiErrorText = f"{api_errors.get(jsonResponse['StatusCode'])} ({api})"
-
-            if apiErrorText:
-                error = SLAPI_API_Error(jsonResponse['StatusCode'],
-                                        apiErrorText,
-                                        jsonResponse['Message'])
-                logger.error(error)
-                raise error
-            else:
-                error = SLAPI_API_Error(jsonResponse['StatusCode'],
-                                        "Unknown API-response code encountered ({api})",
-                                        jsonResponse['Message'])
-                logger.error(error)
-                raise error
-
-        elif 'Trip' in jsonResponse:
-            logger.debug("Call completed")
-            return jsonResponse
-
-        elif 'Sites' in jsonResponse:
-            logger.debug("Call completed")
-            return jsonResponse
-
+        if len(request) == 2:
+            origin, destination = request
+            params.update(
+                {
+                    "originExtId": origin,
+                    "destExtId": destination,
+                }
+            )
+        elif len(request) == 4:
+            orgLat, orgLong, destLat, destLong = request
+            params.update(
+                {
+                    "originCoordLat": orgLat,
+                    "originCoordLong": orgLong,
+                    "destCoordLat": destLat,
+                    "destCoordLong": destLong,
+                }
+            )
         else:
-            error = SLAPI_Error(-100, f"ResponseType is not ({api})")
-            logger.error(error)
-            raise error
+            raise ValueError("Invalid request")
 
+        resp = await self._session.get(
+            "https://journeyplanner.integration.sl.se/v1/TravelplannerV3_1/trip.json",
+            params=params,
+            headers={"User-agent": USER_AGENT},
+        )
+        resp.raise_for_status()
 
-class slapi_pu1(slapi):
-    def __init__(self, api_token, timeout=None):
-        super().__init__(timeout)
-        self._api_token = api_token
+        jsonResponse = await resp.json()
+        if not jsonResponse:
+            raise SLAPI_Error(999, "Internal error", "jsonResponse is empty")
 
-    async def request(self, searchstring):
-        logger.debug("Will call PU1 API")
-        return await self._get(PU1_URL.format(self._api_token, searchstring),"Location Lookup")
+        if "Trip" not in jsonResponse:
+            logger.debug(jsonResponse)
+            raise SLAPI_Error(-100, "ResponseType not as expected")
 
-
-class slapi_rp3(slapi):
-    def __init__(self, api_token, timeout=None):
-        super().__init__(timeout)
-        self._api_token = api_token
-
-    async def request(self, origin, destination, orgLat, orgLong, destLat, destLong):
-        logger.debug("Will call RP3 API")
-        return await self._get(RP3_URL.format(self._api_token, origin, destination,
-                                              orgLat, orgLong, destLat, destLong),"Route Planner")
-
+        return jsonResponse

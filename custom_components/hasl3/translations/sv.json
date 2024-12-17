@@ -24,7 +24,7 @@
             "lookup_location": {
                 "description": "Hitta hållplats med SL Stop lookup API",
                 "data": {
-                    "lookup_api_key": "\"Platsuppslag\" api nyckel",
+                    "lookup_api_key": "\"Trafikverket öppet API\" nyckel",
                     "lookup_search_key": "Sökfråga",
                     "siteid": "Plats"
                 }
@@ -75,6 +75,10 @@
                     "ferry": "Färjor"
 				}
             }
+        },
+        "error": {
+            "lookup_failed": "Misslyckades att hitta plats med angiven nyckel. Kontrollera nyckeln och försök igen.",
+            "only_one_status_sensor": "Det kan bara finnas en statussensor per plats. Välj en annan plats eller ta bort den befintliga statussensorn."
         }
     },
     "options": {

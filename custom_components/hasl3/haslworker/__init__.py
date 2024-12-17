@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import now
 
 from custom_components.hasl3.rrapi import rrapi_rra, rrapi_rrd, rrapi_rrr
-from custom_components.hasl3.slapi import slapi_fp, slapi_rp3
+from custom_components.hasl3.slapi import slapi_fp
 
 logger = logging.getLogger("custom_components.hasl3.worker")
 
@@ -155,6 +155,7 @@ class HaslWorker(object):
 
     async def process_rp3(self):
         logger.debug("[process_rp3] Entered")
+        return # Disabled for now
 
         for rp3key in list(self.data.rp3keys):
             logger.debug(f"[process_rp3] Processing key {rp3key}")
