@@ -76,42 +76,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
                 },
             )
 
-    async def sl_find_trip_pos(service: EventOrService):
-        serviceLogger.debug("[sl_find_trip_pos] Entered")
-        olat = service.data.get("orig_lat")
-        olon = service.data.get("orig_long")
-        dlat = service.data.get("dest_lat")
-        dlon = service.data.get("dest_long")
-        api_key = service.data.get("api_key")
-
-        serviceLogger.debug(
-            f"[sl_find_trip_pos] Finding from '{olat} {olon}' to '{dlat} {dlon}' with key {api_key}"
-        )
-
-        try:
-            rp3api = SLRoutePlanner31TripApi(api_key)
-            requestResult = await rp3api.request("", "", olat, olon, dlat, dlon)
-            serviceLogger.debug("[sl_find_trip_pos] Completed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_pos",
-                    "state": "success",
-                    "result": requestResult,
-                },
-            )
-
-        except Exception as e:
-            serviceLogger.debug("[sl_find_trip_pos] Lookup failed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_pos",
-                    "state": "error",
-                    "result": f"Exception occured during execution: {str(e)}",
-                },
-            )
-
     async def eventListener(service: Event):
         serviceLogger.debug("[eventListener] Entered")
 
@@ -120,10 +84,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
         if command == "rr_find_location":
             hass.async_add_job(rr_find_location(service))
             serviceLogger.debug("[eventListener] Dispatched to rr_find_location")
-
-        if command == "sl_find_trip_pos":
-            hass.async_add_job(sl_find_trip_pos(service))
-            serviceLogger.debug("[eventListener] Dispatched to sl_find_trip_pos")
 
     logger.debug("[setup] Registering services")
     try:
