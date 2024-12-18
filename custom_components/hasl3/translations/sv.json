@@ -11,7 +11,7 @@
                     "Resrobot Arrivals": "Resrobot Arrivals",
                     "Resrobot Route Sensor": "Resrobot Route Sensor",
                     "SL Vehicle Locations": "SL Vehicle Locations",
-                    "SL Route Sensor": "SL Route Sensor"
+                    "route_v2": "SL Route Sensor"
                 }
             },
             "departure_v2": {
@@ -27,6 +27,12 @@
                     "lookup_api_key": "\"Trafikverket öppet API\" nyckel",
                     "lookup_search_key": "Sökfråga",
                     "siteid": "Plats"
+                }
+            },
+            "rp3key": {
+                "description": "Ange en API-nyckel",
+                "data": {
+                    "rp3key": "\"Trafikverket öppet API\" nyckel"
                 }
             },
             "name": {
@@ -49,7 +55,6 @@
 					"lines": "Linjer (kommaseparerad lista)",
 					"stops": "Plats IDn (kommaseparerad lista)",
 
-                    "rp3key": "SL Reseplaneraren 3.1 API-nyckel",
                     "from": "Från med plats id eller som longlat-par (59.33258,18.0649)",
 					"to": "Till med plats id eller som longlat-par (59.33258,18.0649)",
 
@@ -78,7 +83,9 @@
         },
         "error": {
             "lookup_failed": "Misslyckades att hitta plats med angiven nyckel. Kontrollera nyckeln och försök igen.",
-            "only_one_status_sensor": "Det kan bara finnas en statussensor per plats. Välj en annan plats eller ta bort den befintliga statussensorn."
+            "only_one_status_sensor": "Det kan bara finnas en statussensor per plats. Välj en annan plats eller ta bort den befintliga statussensorn.",
+            "invalid_siteid_or_coords": "Ogiltigt plats id eller koordinater",
+            "inconsistent_source_and_destination": "Inkonsistent källa och destination. Använd antingen plats id eller koordinater för båda"
         }
     },
     "options": {

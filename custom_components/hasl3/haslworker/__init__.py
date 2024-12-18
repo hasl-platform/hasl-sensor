@@ -18,8 +18,6 @@ class HASLStatus(object):
     running_background_tasks = False
 
 class HASLData(object):
-    rp3 = {}
-    rp3keys = {}
     rrd = {}
     rra = {}
     rrr = {}
@@ -98,39 +96,6 @@ class HaslWorker(object):
             logger.debug("[check_sensor_state] No sensor specified, will return default")
             return default
 
-    async def assert_rp3(self, key, source, destination):
-        logger.debug("[assert_rp3] Entered")
-
-        listvalue = f"{source}-{destination}"
-        if key not in self.data.rp3keys:
-            logger.debug("[assert_rp3] Registered key")
-            self.data.rp3keys[key] = {
-                "api_key": key,
-                "trips": ""
-            }
-        else:
-            logger.debug("[assert_rp3] Key already present")
-
-        currentvalue = self.data.rp3keys[key]['trips']
-        if currentvalue == "":
-            logger.debug("[assert_rp3] Creating trip key")
-            self.data.rp3keys[key]["trips"] = listvalue
-        else:
-            logger.debug("[assert_rp3] Amending to trip key")
-            self.data.rp3keys[key]["trips"] = f"{currentvalue}|{listvalue}"
-
-        if listvalue not in self.data.rp3:
-            logger.debug("[assert_rp3] Creating default values")
-            self.data.rp3[listvalue] = {
-                "api_type": "slapi-rp3",
-                "api_lastrun": '1970-01-01 01:01:01',
-                "api_result": "Pending",
-                "trips": []
-            }
-
-        logger.debug("[assert_rp3] Completed")
-        return
-
     def parseDepartureTime(self, t):
         """ weird time formats from the API,
         do some quick and dirty conversions. """
@@ -156,137 +121,6 @@ class HaslWorker(object):
     async def process_rp3(self):
         logger.debug("[process_rp3] Entered")
         return # Disabled for now
-
-        for rp3key in list(self.data.rp3keys):
-            logger.debug(f"[process_rp3] Processing key {rp3key}")
-            rp3data = self.data.rp3keys[rp3key]
-            api = slapi_rp3(rp3key)
-            for tripname in '|'.join(set(rp3data["trips"].split('|'))).split('|'):
-                logger.debug(f"[process_rp3] Processing trip {tripname}")
-                newdata = self.data.rp3[tripname]
-                positions = tripname.split('-')
-
-                try:
-
-                    apidata = {}
-
-                    srcLocID = ''
-                    dstLocID = ''
-                    srcLocLat = ''
-                    srcLocLng = ''
-                    dstLocLat = ''
-                    dstLocLng = ''
-
-                    if "," in positions[0]:
-                        srcLoc = positions[0].split(',')
-                        srcLocLat = srcLoc[0]
-                        srcLocLng = srcLoc[1]
-                    else:
-                        srcLocID = positions[0]
-
-                    if "," in positions[1]:
-                        dstLoc = positions[1].split(',')
-                        dstLocLat = dstLoc[0]
-                        dstLocLng = dstLoc[1]
-                    else:
-                        dstLocID = positions[1]
-
-                    apidata = await api.request(srcLocID, dstLocID, srcLocLat, srcLocLng, dstLocLat, dstLocLng)
-                    newdata['trips'] = []
-
-                    # Parse every trip
-                    for trip in apidata["Trip"]:
-                        newtrip = {
-                            'fares': [],
-                            'legs': []
-                        }
-
-                        # Loop all fares and add
-                        for fare in trip['TariffResult']['fareSetItem'][0]['fareItem']:
-                            newfare = {}
-                            newfare['name'] = fare['name']
-                            newfare['desc'] = fare['desc']
-                            newfare['price'] = int(fare['price']) / 100
-                            newtrip['fares'].append(newfare)
-
-                        # Add legs to trips
-                        for leg in trip['LegList']['Leg']:
-                            newleg = {}
-                            # Walking is done by humans.
-                            # And robots.
-                            # Robots are scary.
-                            if leg["type"] == "WALK":
-                                newleg['name'] = leg['name']
-                                newleg['line'] = 'Walk'
-                                newleg['direction'] = 'Walk'
-                                newleg['category'] = 'WALK'
-                            else:
-                                newleg['name'] = leg['Product']['name']
-                                newleg['line'] = leg['Product']['line']
-                                newleg['direction'] = leg['direction']
-                                newleg['category'] = leg['category']
-                            newleg['from'] = leg['Origin']['name']
-                            newleg['to'] = leg['Destination']['name']
-                            newleg['time'] = f"{leg['Origin']['date']} {leg['Origin']['time']}"
-
-                            if leg.get('Stops'):
-                                if leg['Stops'].get('Stop', {}):
-                                    newleg['stops'] = []
-                                    for stop in leg.get('Stops', {}).get('Stop', {}):
-                                        newleg['stops'].append(stop)
-
-                            newtrip['legs'].append(newleg)
-
-                        # Make some shortcuts for data
-                        newtrip['first_leg'] = newtrip['legs'][0]['name']
-                        newtrip['time'] = newtrip['legs'][0]['time']
-                        newtrip['price'] = newtrip['fares'][0]['price']
-                        newtrip['duration'] = str(isodate.parse_duration(trip['duration']))
-                        newtrip['transfers'] = trip['transferCount']
-                        newdata['trips'].append(newtrip)
-
-                    # Add shortcuts to info in the first trip if it exists
-                    firstLegFirstTrip = next((x for x in newdata['trips'][0]['legs'] if x["category"] != "WALK"), [])
-                    lastLegLastTrip = next((x for x in reversed(newdata['trips'][0]['legs']) if x["category"] != "WALK"), [])
-                    newdata['transfers'] = sum(p["category"] != "WALK" for p in newdata['trips'][0]['legs']) - 1 or 0
-                    newdata['price'] = newdata['trips'][0]['price'] or ''
-                    newdata['time'] = newdata['trips'][0]['time'] or ''
-                    newdata['duration'] = newdata['trips'][0]['duration'] or ''
-                    newdata['from'] = newdata['trips'][0]['legs'][0]['from'] or ''
-                    newdata['to'] = newdata['trips'][0]['legs'][len(newdata['trips'][0]['legs']) - 1]['to'] or ''
-                    newdata['origin'] = {}
-                    newdata['origin']['leg'] = firstLegFirstTrip["name"] or ''
-                    newdata['origin']['line'] = firstLegFirstTrip["line"] or ''
-                    newdata['origin']['direction'] = firstLegFirstTrip["direction"] or ''
-                    newdata['origin']['category'] = firstLegFirstTrip["category"] or ''
-                    newdata['origin']['time'] = firstLegFirstTrip["time"] or ''
-                    newdata['origin']['from'] = firstLegFirstTrip["from"] or ''
-                    newdata['origin']['to'] = firstLegFirstTrip["to"] or ''
-                    newdata['destination'] = {}
-                    newdata['destination']['leg'] = lastLegLastTrip["name"] or ''
-                    newdata['destination']['line'] = lastLegLastTrip["line"] or ''
-                    newdata['destination']['direction'] = lastLegLastTrip["direction"] or ''
-                    newdata['destination']['category'] = lastLegLastTrip["category"] or ''
-                    newdata['destination']['time'] = lastLegLastTrip["time"] or ''
-                    newdata['destination']['from'] = lastLegLastTrip["from"] or ''
-                    newdata['destination']['to'] = lastLegLastTrip["to"] or ''
-
-                    newdata['attribution'] = "Stockholms Lokaltrafik"
-                    newdata['last_updated'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                    newdata['api_result'] = "Success"
-                except Exception as e:
-                    logger.debug(f"[process_rp3] Error occurred: {str(e)}")
-                    newdata['api_result'] = "Error"
-                    newdata['api_error'] = str(e)
-
-                newdata['api_lastrun'] = now().strftime('%Y-%m-%d %H:%M:%S')
-                self.data.rp3[tripname] = newdata
-
-                logger.debug(f"[process_rp3] Completed trip {tripname}")
-
-            logger.debug(f"[process_rp3] Completed key {rp3key}")
-
-        logger.debug("[process_rp3] Completed")
 
     async def assert_fp(self, traintype):
         logger.debug("[assert_fp] Entered")

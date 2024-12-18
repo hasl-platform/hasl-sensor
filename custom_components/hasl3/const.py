@@ -1,4 +1,5 @@
-""" SL Platform Constants """
+"""SL Platform Constants"""
+
 from enum import IntEnum
 
 from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
@@ -22,7 +23,7 @@ SENSOR_RRARR = "Resrobot Arrivals"
 SENSOR_RRROUTE = "Resrobot Route Sensor"
 SENSOR_STATUS = "status_v2"
 SENSOR_VEHICLE_LOCATION = "SL Vehicle Locations"
-SENSOR_ROUTE = "SL Route Sensor"
+SENSOR_ROUTE = "route_v2"
 SENSOR_DEPARTURE = "departure_v2"
 
 CONF_RP3_KEY = "rp3key"

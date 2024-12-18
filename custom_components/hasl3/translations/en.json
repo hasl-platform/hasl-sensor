@@ -11,7 +11,7 @@
                     "Resrobot Arrivals": "Resrobot Arrivals",
                     "Resrobot Route Sensor": "Resrobot Route Sensor",
                     "SL Vehicle Locations": "SL Vehicle Locations",
-                    "SL Route Sensor": "SL Route Sensor"
+                    "route_v2": "SL Route Sensor"
                 }
             },
             "departure_v2": {
@@ -27,6 +27,12 @@
                     "lookup_api_key": "\"Trafikverket öppet API\" key",
                     "lookup_search_key": "Search query",
                     "siteid": "Location"
+                }
+            },
+            "rp3key": {
+                "description": "Provide an api key",
+                "data": {
+                    "rp3key": "\"Trafikverket öppet API\" key"
                 }
             },
             "name": {
@@ -51,7 +57,6 @@
 					"property": "Sensor primary property",
 					"timewindow": "How long into the future (5-60 min)",
 
-                    "rp3key": "Reseplaneraren 3.1 API Key",
                     "from": "From as Location ID or Longlat-pair (59.33258,18.0649)",
 					"to": "Destination as Location ID or Longlat-pair (59.33258,18.0649)",
 
@@ -82,7 +87,9 @@
         },
         "error": {
             "lookup_failed": "Failed to lookup location using given key. Check the key and try again.",
-            "only_one_status_sensor": "Only one Sensor of type Status is allowed"
+            "only_one_status_sensor": "Only one Sensor of type Status is allowed",
+            "invalid_siteid_or_coords": "Invalid siteid or coordinates",
+            "inconsistent_source_and_destination": "Inconsistent source and destination formats. Use either siteid or coordinates for both"
         }
     },
     "options": {

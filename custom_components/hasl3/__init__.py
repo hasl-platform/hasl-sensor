@@ -6,16 +6,20 @@ from homeassistant.core import Event, HomeAssistant, ServiceCall
 
 from custom_components.hasl3.haslworker import HaslWorker
 from custom_components.hasl3.rrapi import rrapi_sl
-from custom_components.hasl3.slapi import SLRoutePlanner31TripApi
 
 from .const import (
     CONF_INTEGRATION_ID,
     CONF_INTEGRATION_TYPE,
     DOMAIN,
     SCHEMA_VERSION,
+    SENSOR_DEPARTURE,
     SENSOR_ROUTE,
+    SENSOR_STATUS,
     SENSOR_VEHICLE_LOCATION,
 )
+from .sensors.departure import async_setup_coordinator as setup_departure_coordinator
+from .sensors.route import async_setup_coordinator as setup_route_coordinator
+from .sensors.status import async_setup_coordinator as setup_status_coordinator
 from .services.sl_find_location import register as register_sl_find_location
 from .services.sl_find_trip_id import register as register_sl_find_trip_id
 from .services.sl_find_trip_pos import register as register_sl_find_trip_pos
@@ -76,42 +80,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
                 },
             )
 
-    async def sl_find_trip_pos(service: EventOrService):
-        serviceLogger.debug("[sl_find_trip_pos] Entered")
-        olat = service.data.get("orig_lat")
-        olon = service.data.get("orig_long")
-        dlat = service.data.get("dest_lat")
-        dlon = service.data.get("dest_long")
-        api_key = service.data.get("api_key")
-
-        serviceLogger.debug(
-            f"[sl_find_trip_pos] Finding from '{olat} {olon}' to '{dlat} {dlon}' with key {api_key}"
-        )
-
-        try:
-            rp3api = SLRoutePlanner31TripApi(api_key)
-            requestResult = await rp3api.request("", "", olat, olon, dlat, dlon)
-            serviceLogger.debug("[sl_find_trip_pos] Completed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_pos",
-                    "state": "success",
-                    "result": requestResult,
-                },
-            )
-
-        except Exception as e:
-            serviceLogger.debug("[sl_find_trip_pos] Lookup failed")
-            hass.bus.fire(
-                DOMAIN,
-                {
-                    "source": "sl_find_trip_pos",
-                    "state": "error",
-                    "result": f"Exception occured during execution: {str(e)}",
-                },
-            )
-
     async def eventListener(service: Event):
         serviceLogger.debug("[eventListener] Entered")
 
@@ -120,10 +88,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigEntry):
         if command == "rr_find_location":
             hass.async_add_job(rr_find_location(service))
             serviceLogger.debug("[eventListener] Dispatched to rr_find_location")
-
-        if command == "sl_find_trip_pos":
-            hass.async_add_job(sl_find_trip_pos(service))
-            serviceLogger.debug("[eventListener] Dispatched to sl_find_trip_pos")
 
     logger.debug("[setup] Registering services")
     try:
@@ -221,8 +185,25 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     return True
 
 
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Update listener."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up HASL entry."""
+
+    type_ = entry.data[CONF_INTEGRATION_TYPE]
+    if coro := {
+        # "new-style" delegated setup functions
+        SENSOR_DEPARTURE: setup_departure_coordinator,
+        SENSOR_STATUS: setup_status_coordinator,
+        SENSOR_ROUTE: setup_route_coordinator,
+    }.get(type_):
+        entry.runtime_data = await coro(hass, entry)
+
+    # subscribe to updates
+    entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, [SENSOR_DOMAIN])
     return True

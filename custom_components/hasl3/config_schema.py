@@ -1,7 +1,6 @@
 """HASL Configuration Database."""
 
 import voluptuous as vol
-
 from homeassistant.helpers import selector
 
 from .const import (
@@ -20,7 +19,6 @@ from .const import (
     CONF_FP_TVB,
     CONF_LINES,
     CONF_NAME,
-    CONF_RP3_KEY,
     CONF_RR_KEY,
     CONF_RRARR_PROPERTY_LIST,
     CONF_RRDEP_PROPERTY_LIST,
@@ -44,14 +42,10 @@ from .const import (
     SENSOR_VEHICLE_LOCATION,
 )
 from .sensors.departure import CONFIG_SCHEMA as departure_config_schema
+from .sensors.route import CONFIG_SCHEMA as route_config_option_schema
 from .sensors.status import CONFIG_SCHEMA as status_config_schema
 
-
-NAME_CONFIG_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_NAME): selector.TextSelector()
-    }
-)
+NAME_CONFIG_SCHEMA = vol.Schema({vol.Required(CONF_NAME): selector.TextSelector()})
 
 
 def schema_by_type(type_: str) -> vol.Schema:
@@ -61,18 +55,19 @@ def schema_by_type(type_: str) -> vol.Schema:
     if schema := {
         SENSOR_DEPARTURE: departure_config_schema,
         SENSOR_STATUS: status_config_schema,
+        SENSOR_ROUTE: route_config_option_schema,
     }.get(type_):
         return schema
 
     schema = {
         SENSOR_VEHICLE_LOCATION: vehiclelocation_config_option_schema,
-        SENSOR_ROUTE: route_config_option_schema,
         SENSOR_RRDEP: rrdep_config_option_schema,
         SENSOR_RRARR: rrarr_config_option_schema,
         SENSOR_RRROUTE: rrroute_config_option_schema,
     }.get(type_)
 
     return vol.Schema(schema())
+
 
 def vehiclelocation_config_option_schema(options: dict = {}) -> dict:
     """The schema used for train location service"""
@@ -100,25 +95,6 @@ def vehiclelocation_config_option_schema(options: dict = {}) -> dict:
         vol.Optional(CONF_FP_TB1, default=options.get(CONF_FP_TB1)): bool,
         vol.Optional(CONF_FP_TB2, default=options.get(CONF_FP_TB2)): bool,
         vol.Optional(CONF_FP_TB3, default=options.get(CONF_FP_TB3)): bool,
-        vol.Required(CONF_SCAN_INTERVAL, default=options.get(CONF_SCAN_INTERVAL)): int,
-        vol.Optional(CONF_SENSOR, default=options.get(CONF_SENSOR)): str,
-    }
-
-
-def route_config_option_schema(options: dict = {}) -> dict:
-    """Deviation sensor options."""
-    if not options:
-        options = {
-            CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-            CONF_SENSOR: "",
-            CONF_RP3_KEY: "",
-            CONF_SOURCE: "",
-            CONF_DESTINATION: "",
-        }
-    return {
-        vol.Required(CONF_RP3_KEY, default=options.get(CONF_RP3_KEY)): str,
-        vol.Required(CONF_SOURCE, default=options.get(CONF_SOURCE)): str,
-        vol.Required(CONF_DESTINATION, default=options.get(CONF_DESTINATION)): str,
         vol.Required(CONF_SCAN_INTERVAL, default=options.get(CONF_SCAN_INTERVAL)): int,
         vol.Optional(CONF_SENSOR, default=options.get(CONF_SENSOR)): str,
     }

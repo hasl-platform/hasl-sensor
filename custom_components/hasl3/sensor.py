@@ -1,4 +1,5 @@
-""" SL Platform Sensor """
+"""SL Platform Sensor"""
+
 import logging
 import math
 
@@ -10,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import now
 
 from .const import (
-    CONF_DESTINATION,
     CONF_DESTINATION_ID,
     CONF_DIRECTION,
     CONF_FP_LB,
@@ -24,13 +24,11 @@ from .const import (
     CONF_INTEGRATION_ID,
     CONF_INTEGRATION_TYPE,
     CONF_LINES,
-    CONF_RP3_KEY,
     CONF_RR_KEY,
     CONF_SCAN_INTERVAL,
     CONF_SENSOR,
     CONF_SENSOR_PROPERTY,
     CONF_SITE_ID,
-    CONF_SOURCE,
     CONF_SOURCE_ID,
     CONF_TIMEWINDOW,
     DEVICE_GUID,
@@ -48,9 +46,10 @@ from .const import (
     SENSOR_VEHICLE_LOCATION,
     STATE_ON,
 )
-from .sensors.departure import async_setup_entry as setup_departure_sensor
-from .sensors.status import async_setup_entry as setup_status_sensor
 from .haslworker import HaslWorker
+from .sensors.departure import async_setup_entry as setup_departure_sensor
+from .sensors.route import async_setup_entry as setup_route_sensor
+from .sensors.status import async_setup_entry as setup_status_sensor
 
 logger = logging.getLogger(f"custom_components.{DOMAIN}.sensors")
 
@@ -72,38 +71,19 @@ async def async_setup_entry(
         # "new-style" delegated setup functions
         SENSOR_DEPARTURE: setup_departure_sensor,
         SENSOR_STATUS: setup_status_sensor,
+        SENSOR_ROUTE: setup_route_sensor,
     }.get(type_, setup_hasl_sensor):
         await coro(hass, entry, async_add_entities)
 
 
-async def setup_hasl_sensor(hass: HomeAssistant, config: ConfigEntry, async_add_entities: AddEntitiesCallback):
+async def setup_hasl_sensor(
+    hass: HomeAssistant, config: ConfigEntry, async_add_entities: AddEntitiesCallback
+):
     """Setup sensor platform."""
     logger.debug("[setup_hasl_sensor] Entered")
 
     sensors = []
     worker: HaslWorker = hass.data[DOMAIN]["worker"]
-
-    try:
-        logger.debug("[setup_hasl_sensor] Setting up RP3 sensors...")
-        if config.data[CONF_INTEGRATION_TYPE] == SENSOR_ROUTE:
-            if CONF_RP3_KEY in config.options:
-                await worker.assert_rp3(
-                    config.options[CONF_RP3_KEY],
-                    config.options[CONF_SOURCE],
-                    config.options[CONF_DESTINATION],
-                )
-                sensors.append(
-                    HASLRouteSensor(
-                        hass,
-                        config,
-                        f"{config.options[CONF_SOURCE]}-{config.options[CONF_DESTINATION]}",
-                    )
-                )
-            logger.debug("[setup_hasl_sensor] Force proccessing RP3 sensors")
-            await worker.process_rp3()
-        logger.debug("[setup_hasl_sensor] Completed setting up RP3 sensors")
-    except Exception as e:
-        logger.error(f"[setup_hasl_sensor] Failed to set up RP3 sensors: {str(e)}")
 
     try:
         logger.debug("[setup_hasl_sensor] Setting up FP sensors...")
@@ -213,145 +193,6 @@ class HASLDevice(Entity):
             "sw_version": HASL_VERSION,
             "entry_type": DeviceEntryType.SERVICE,
         }
-
-
-class HASLRouteSensor(HASLDevice):
-    """HASL Train Location Sensor class."""
-
-    def __init__(self, hass, config, trip):
-        """Initialize."""
-        self._hass = hass
-        self._config = config
-        self._enabled_sensor = config.options[CONF_SENSOR]
-        self._trip = trip
-        self._name = f"SL {self._trip} Route Sensor ({self._config.title})"
-        self._sensordata = []
-        self._scan_interval = self._config.options[CONF_SCAN_INTERVAL] or 300
-        self._worker: HaslWorker = hass.data[DOMAIN]["worker"]
-
-    async def async_update(self):
-        """Update the sensor."""
-
-        logger.debug("[async_update] Entered")
-        logger.debug(f"[async_update] Processing {self._name}")
-
-        if self._worker.data.rp3[self._trip]["api_lastrun"]:
-            if self._worker.checksensorstate(self._enabled_sensor, STATE_ON):
-                if (
-                    self._sensordata == []
-                    or self._worker.getminutesdiff(
-                        now().strftime("%Y-%m-%d %H:%M:%S"),
-                        self._worker.data.rp3[self._trip]["api_lastrun"],
-                    )
-                    > self._config.options[CONF_SCAN_INTERVAL]
-                ):
-                    try:
-                        await self._worker.process_rp3()
-                        logger.debug("[async_update] Update processed")
-                    except:
-                        logger.debug("[async_update] Error occurred during update")
-                else:
-                    logger.debug("[async_update] Not due for update, skipping")
-
-        self._sensordata = self._worker.data.rp3[self._trip]
-        logger.debug("[async_update] Completed")
-        return
-
-    @property
-    def unique_id(self):
-        """Return a unique ID to use for this sensor."""
-        return f"sl-route-{self._trip}-sensor-{self._config.data[CONF_INTEGRATION_ID]}"
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        if self._sensordata == []:
-            return "Unknown"
-        else:
-            return len(self._sensordata["trips"])
-
-    @property
-    def icon(self):
-        """Return the icon of the sensor."""
-        return "mdi:train"
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return ""
-
-    @property
-    def scan_interval(self):
-        """Return the unique id."""
-        return self._scan_interval
-
-    @property
-    def available(self):
-        """Return true if value is valid."""
-        return self._sensordata != []
-
-    @property
-    def extra_state_attributes(self):
-        val = {}
-
-        if self._sensordata == []:
-            return val
-
-        if self._sensordata["api_result"] == "Success":
-            val["api_result"] = "Success"
-        else:
-            val["api_result"] = self._sensordata["api_error"]
-
-        # Set values of the sensor.
-        val["scan_interval"] = self._scan_interval
-        val["refresh_enabled"] = self._worker.checksensorstate(
-            self._enabled_sensor, STATE_ON
-        )
-        try:
-            val["attribution"] = self._sensordata["attribution"]
-            val["trips"] = self._sensordata["trips"]
-            val["transfers"] = self._sensordata["transfers"]
-            val["price"] = self._sensordata["price"]
-            val["time"] = self._sensordata["time"]
-            val["duration"] = self._sensordata["duration"]
-            val["to"] = self._sensordata["to"]
-            val["from"] = self._sensordata["from"]
-            val["origin"] = {}
-            val["origin"]["leg"] = self._sensordata["origin"]["leg"]
-            val["origin"]["line"] = self._sensordata["origin"]["line"]
-            val["origin"]["direction"] = self._sensordata["origin"]["direction"]
-            val["origin"]["category"] = self._sensordata["origin"]["category"]
-            val["origin"]["time"] = self._sensordata["origin"]["time"]
-            val["origin"]["from"] = self._sensordata["origin"]["from"]
-            val["origin"]["to"] = self._sensordata["origin"]["to"]
-            val["origin"]["prognosis"] = self._sensordata["origin"]["prognosis"]
-            val["destination"] = {}
-            val["destination"]["leg"] = self._sensordata["destination"]["leg"]
-            val["destination"]["line"] = self._sensordata["destination"]["line"]
-            val["destination"]["direction"] = self._sensordata["destination"][
-                "direction"
-            ]
-            val["destination"]["category"] = self._sensordata["destination"]["category"]
-            val["destination"]["time"] = self._sensordata["destination"]["time"]
-            val["destination"]["from"] = self._sensordata["destination"]["from"]
-            val["destination"]["to"] = self._sensordata["destination"]["to"]
-            val["destination"]["prognosis"] = self._sensordata["destination"][
-                "prognosis"
-            ]
-            val["last_refresh"] = self._sensordata["last_updated"]
-            val["trip_count"] = len(self._sensordata["trips"])
-        except:
-            val["error"] = "NoDataYet"
-            logger.debug(
-                f"Data was not avaliable for processing when getting attributes for sensor {self._name}"
-            )
-
-        return val
 
 
 class HASLRRRouteSensor(HASLDevice):
@@ -921,6 +762,7 @@ class HASLRRArrivalSensor(HASLDevice):
             )
 
         return val
+
 
 class HASLVehicleLocationSensor(HASLDevice):
     """HASL Train Location Sensor class."""

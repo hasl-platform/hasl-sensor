@@ -1,13 +1,9 @@
+import logging
 from asyncio import timeout
 from datetime import timedelta
-import logging
 from typing import TYPE_CHECKING
 
-from tsl.clients.deviations import DeviationsClient
-from tsl.models.common import TransportMode
-from tsl.models.deviations import Deviation
 import voluptuous as vol
-
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON
@@ -19,6 +15,9 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from tsl.clients.deviations import DeviationsClient
+from tsl.models.common import TransportMode
+from tsl.models.deviations import Deviation
 
 from .. import const
 from .device import SL_TRAFFIK_DEVICE_INFO
@@ -122,7 +121,7 @@ class TrafikStatusSensor(CoordinatorEntity[StatusDataUpdateCoordinator], SensorE
         key="status",
         icon="mdi:alert",
         has_entity_name=True,
-        name="Deviations"
+        name="Deviations",
     )
 
     def __init__(
@@ -154,9 +153,13 @@ class TrafikStatusSensor(CoordinatorEntity[StatusDataUpdateCoordinator], SensorE
         return {"deviations": self.coordinator.data}
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update listener."""
-    await hass.config_entries.async_reload(entry.entry_id)
+async def async_setup_coordinator(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+):
+    coordinator = StatusDataUpdateCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+    return coordinator
 
 
 async def async_setup_entry(
@@ -164,14 +167,4 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
-    """Set up the sensor platform."""
-
-    coordinator = StatusDataUpdateCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-    entry.runtime_data = coordinator
-
-    # subscribe to updates
-    entry.async_on_unload(entry.add_update_listener(update_listener))
-
-    sensors = [TrafikStatusSensor(entry)]
-    async_add_entities(sensors)
+    async_add_entities([TrafikStatusSensor(entry)])

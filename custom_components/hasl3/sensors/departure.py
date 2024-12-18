@@ -1,14 +1,11 @@
 """Departure sensor for hasl3."""
 
+import logging
 from asyncio import timeout
 from datetime import timedelta
-import logging
 from typing import TYPE_CHECKING
 
-from tsl.clients.transport import TransportClient
-from tsl.models.departures import SiteDepartureResponse, TransportMode
 import voluptuous as vol
-
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
@@ -24,10 +21,11 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from tsl.clients.transport import TransportClient
+from tsl.models.departures import SiteDepartureResponse, TransportMode
 
 from .. import const
 from .device import SL_TRAFFIK_DEVICE_INFO
-
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -73,9 +71,13 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update listener."""
-    await hass.config_entries.async_reload(entry.entry_id)
+async def async_setup_coordinator(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+):
+    coordinator = DepartureDataUpdateCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+    return coordinator
 
 
 async def async_setup_entry(
@@ -85,20 +87,13 @@ async def async_setup_entry(
 ):
     """Set up the sensor platform."""
 
-    coordinator = DepartureDataUpdateCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-    entry.runtime_data = coordinator
-
-    # subscribe to updates
-    entry.async_on_unload(entry.add_update_listener(update_listener))
-
-    sensors = [
-        DeparturesSensor(entry),
-        DeviationsSensor(entry),
-        NextDepartureSensor(entry),
-    ]
-
-    async_add_entities(sensors)
+    async_add_entities(
+        [
+            DeparturesSensor(entry),
+            DeviationsSensor(entry),
+            NextDepartureSensor(entry),
+        ]
+    )
 
 
 class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse]):
@@ -111,7 +106,6 @@ class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse
         hass: HomeAssistant,
         config_entry: ConfigEntry,
     ) -> None:
-
         def _int_or_none(x):
             return int(x) if x else None
 
@@ -133,7 +127,6 @@ class DepartureDataUpdateCoordinator(DataUpdateCoordinator[SiteDepartureResponse
         self._line = _int_or_none(config_entry.options.get(const.CONF_LINE))
         self._sensor_id: str | None = config_entry.options.get(const.CONF_SENSOR)
         interval = timedelta(seconds=config_entry.options[const.CONF_SCAN_INTERVAL])
-
 
         if TYPE_CHECKING:
             assert config_entry.unique_id
@@ -219,7 +212,6 @@ class DeparturesSensor(BaseDepartureSensor):
 
         return len(self.coordinator.data.departures)
 
-
     @property
     def extra_state_attributes(self):
         if not self.coordinator.data:
@@ -229,7 +221,6 @@ class DeparturesSensor(BaseDepartureSensor):
 
 
 class DeviationsSensor(BaseDepartureSensor):
-
     entity_description = SensorEntityDescription(
         key="deviations",
         icon="mdi:alert",
@@ -255,7 +246,6 @@ class DeviationsSensor(BaseDepartureSensor):
 
 
 class NextDepartureSensor(BaseDepartureSensor):
-
     entity_description = SensorEntityDescription(
         key="next_departure",
         icon="mdi:clock",
