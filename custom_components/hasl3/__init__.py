@@ -12,10 +12,14 @@ from .const import (
     CONF_INTEGRATION_TYPE,
     DOMAIN,
     SCHEMA_VERSION,
+    SENSOR_DEPARTURE,
     SENSOR_ROUTE,
+    SENSOR_STATUS,
     SENSOR_VEHICLE_LOCATION,
 )
+from .sensors.departure import async_setup_coordinator as setup_departure_coordinator
 from .sensors.route import async_setup_coordinator as setup_route_coordinator
+from .sensors.status import async_setup_coordinator as setup_status_coordinator
 from .services.sl_find_location import register as register_sl_find_location
 from .services.sl_find_trip_id import register as register_sl_find_trip_id
 from .services.sl_find_trip_pos import register as register_sl_find_trip_pos
@@ -192,6 +196,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     type_ = entry.data[CONF_INTEGRATION_TYPE]
     if coro := {
         # "new-style" delegated setup functions
+        SENSOR_DEPARTURE: setup_departure_coordinator,
+        SENSOR_STATUS: setup_status_coordinator,
         SENSOR_ROUTE: setup_route_coordinator,
     }.get(type_):
         entry.runtime_data = await coro(hass, entry)
