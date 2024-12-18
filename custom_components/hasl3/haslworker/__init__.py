@@ -18,8 +18,6 @@ class HASLStatus(object):
     running_background_tasks = False
 
 class HASLData(object):
-    rp3 = {}
-    rp3keys = {}
     rrd = {}
     rra = {}
     rrr = {}
@@ -97,39 +95,6 @@ class HaslWorker(object):
         else:
             logger.debug("[check_sensor_state] No sensor specified, will return default")
             return default
-
-    async def assert_rp3(self, key, source, destination):
-        logger.debug("[assert_rp3] Entered")
-
-        listvalue = f"{source}-{destination}"
-        if key not in self.data.rp3keys:
-            logger.debug("[assert_rp3] Registered key")
-            self.data.rp3keys[key] = {
-                "api_key": key,
-                "trips": ""
-            }
-        else:
-            logger.debug("[assert_rp3] Key already present")
-
-        currentvalue = self.data.rp3keys[key]['trips']
-        if currentvalue == "":
-            logger.debug("[assert_rp3] Creating trip key")
-            self.data.rp3keys[key]["trips"] = listvalue
-        else:
-            logger.debug("[assert_rp3] Amending to trip key")
-            self.data.rp3keys[key]["trips"] = f"{currentvalue}|{listvalue}"
-
-        if listvalue not in self.data.rp3:
-            logger.debug("[assert_rp3] Creating default values")
-            self.data.rp3[listvalue] = {
-                "api_type": "slapi-rp3",
-                "api_lastrun": '1970-01-01 01:01:01',
-                "api_result": "Pending",
-                "trips": []
-            }
-
-        logger.debug("[assert_rp3] Completed")
-        return
 
     def parseDepartureTime(self, t):
         """ weird time formats from the API,
