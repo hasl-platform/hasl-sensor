@@ -61,7 +61,6 @@ def schema_by_type(type_: str) -> vol.Schema:
 
     schema = {
         SENSOR_VEHICLE_LOCATION: vehiclelocation_config_option_schema,
-        SENSOR_ROUTE: route_config_option_schema,
         SENSOR_RRDEP: rrdep_config_option_schema,
         SENSOR_RRARR: rrarr_config_option_schema,
         SENSOR_RRROUTE: rrroute_config_option_schema,
