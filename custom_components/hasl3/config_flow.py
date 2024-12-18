@@ -3,10 +3,15 @@
 import logging
 import uuid
 from functools import partial
-from typing import Any, cast
+from typing import Any, Mapping, cast
 
 import voluptuous as vol
-from homeassistant.config_entries import CONN_CLASS_CLOUD_POLL, ConfigEntry, ConfigFlow
+from homeassistant.config_entries import (
+    CONN_CLASS_CLOUD_POLL,
+    SOURCE_REAUTH,
+    ConfigEntry,
+    ConfigFlow,
+)
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector as sel
@@ -19,6 +24,7 @@ from homeassistant.helpers.schema_config_entry_flow import (
 from tsl.clients.common import ClientException
 from tsl.clients.stoplookup import StopLookupClient
 
+from . import const
 from .config_schema import NAME_CONFIG_SCHEMA, schema_by_type
 from .const import (
     CONF_INTEGRATION_ID,
@@ -28,6 +34,7 @@ from .const import (
     DOMAIN,
     SCHEMA_VERSION,
     SENSOR_DEPARTURE,
+    SENSOR_ROUTE,
     SENSOR_STATUS,
 )
 
@@ -56,15 +63,17 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     VERSION = SCHEMA_VERSION
     CONNECTION_CLASS = CONN_CLASS_CLOUD_POLL
 
+    new_sensors = [
+        SENSOR_DEPARTURE,
+        SENSOR_STATUS,
+        SENSOR_ROUTE,
+    ]
+
     def __init__(self):
         self._options = {}
 
         # plug in the handlers for the legacy integration types
-        for step in (
-            x
-            for x in CONF_INTEGRATION_LIST
-            if x not in {SENSOR_DEPARTURE, SENSOR_STATUS}
-        ):
+        for step in (x for x in CONF_INTEGRATION_LIST if x not in self.new_sensors):
             setattr(self, f"async_step_{step}", partial(self.async_step_legacy, step))
 
     @staticmethod
@@ -78,7 +87,8 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         # TODO: add back legacy sensor types
         return self.async_show_menu(
-            step_id="user", menu_options=[SENSOR_DEPARTURE, SENSOR_STATUS]
+            step_id="user",
+            menu_options=self.new_sensors,
         )
 
     async def async_step_departure_v2(self, user_input: dict[str, Any] | None = None):
@@ -98,6 +108,44 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         #     if entry.data[CONF_INTEGRATION_TYPE] == SENSOR_STATUS:
         #         raise SchemaFlowError("only_one_status_sensor")
 
+        return await self.async_step_name()
+
+    async def async_step_route_v2(self, user_input: dict[str, Any] | None = None):
+        self._options[CONF_INTEGRATION_TYPE] = SENSOR_ROUTE
+
+        return await self.async_step_rp3key()
+
+    async def async_step_rp3key(self, user_input: dict[str, Any] | None = None):
+        old_key = (
+            self._get_reauth_entry().data.get(const.CONF_RP3_KEY)
+            if self.source == SOURCE_REAUTH
+            else None
+        )
+
+        if (user_input is None) or (not user_input.get(const.CONF_RP3_KEY)):
+            return self.async_show_form(
+                step_id="rp3key",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            const.CONF_RP3_KEY,
+                            description={"suggested_value": old_key},
+                        ): str,
+                    }
+                ),
+            )
+
+        new_key = user_input[const.CONF_RP3_KEY]
+
+        if self.source == SOURCE_REAUTH:
+            return self.async_update_reload_and_abort(
+                self._get_reauth_entry(),
+                data_updates={
+                    const.CONF_RP3_KEY: new_key,
+                },
+            )
+
+        self._options[const.CONF_RP3_KEY] = new_key
         return await self.async_step_name()
 
     async def async_step_lookup_location(
@@ -221,6 +269,9 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             CONF_INTEGRATION_TYPE: type_,
         }
 
+        if type_ == SENSOR_ROUTE:
+            data[const.CONF_RP3_KEY] = self._options[const.CONF_RP3_KEY]
+
         # TODO: remove legacy: generate a new integration id
         if type_ not in (SENSOR_DEPARTURE, SENSOR_STATUS):
             data[CONF_INTEGRATION_ID] = uuid.uuid1()
@@ -228,3 +279,14 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=self._options[CONF_NAME], data=data, options=user_input
         )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]):
+        type_ = entry_data[CONF_INTEGRATION_TYPE]
+        self._options[CONF_INTEGRATION_TYPE] = type_
+
+        if step := {
+            SENSOR_ROUTE: self.async_step_rp3key,
+        }.get(type_):
+            return await step()
+
+        return await self.async_abort(reason="reauth_not_supported")

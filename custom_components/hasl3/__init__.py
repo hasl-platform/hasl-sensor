@@ -6,7 +6,6 @@ from homeassistant.core import Event, HomeAssistant, ServiceCall
 
 from custom_components.hasl3.haslworker import HaslWorker
 from custom_components.hasl3.rrapi import rrapi_sl
-from custom_components.hasl3.slapi import SLRoutePlanner31TripApi
 
 from .const import (
     CONF_INTEGRATION_ID,
@@ -16,6 +15,7 @@ from .const import (
     SENSOR_ROUTE,
     SENSOR_VEHICLE_LOCATION,
 )
+from .sensors.route import async_setup_coordinator as setup_route_coordinator
 from .services.sl_find_location import register as register_sl_find_location
 from .services.sl_find_trip_id import register as register_sl_find_trip_id
 from .services.sl_find_trip_pos import register as register_sl_find_trip_pos
@@ -181,8 +181,23 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     return True
 
 
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Update listener."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up HASL entry."""
+
+    type_ = entry.data[CONF_INTEGRATION_TYPE]
+    if coro := {
+        # "new-style" delegated setup functions
+        SENSOR_ROUTE: setup_route_coordinator,
+    }.get(type_):
+        entry.runtime_data = await coro(hass, entry)
+
+    # subscribe to updates
+    entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, [SENSOR_DOMAIN])
     return True

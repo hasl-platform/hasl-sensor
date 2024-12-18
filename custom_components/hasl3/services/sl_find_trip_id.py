@@ -4,6 +4,7 @@ from functools import partial
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from tsl.models.stops import LookupSiteId
 
 from ..const import DOMAIN
 from ..slapi import SLRoutePlanner31TripApi
@@ -27,8 +28,8 @@ SCHEMA = vol.Schema(
 
 async def service(hass: HomeAssistant, call: ServiceCall):
     api_key = call.data.get(API_KEY)
-    origin = f"30010{call.data.get(ORIGIN)}"
-    destination = f"30010{call.data.get(DESTINATION)}"
+    origin = LookupSiteId.from_siteid(call.data.get(ORIGIN))
+    destination = LookupSiteId.from_siteid(call.data.get(DESTINATION))
 
     logger.debug(
         f"Searching for trip {origin} -> {destination} with key {'*' * len(api_key)}"

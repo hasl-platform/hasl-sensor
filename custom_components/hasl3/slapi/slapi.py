@@ -8,7 +8,7 @@ import httpx
 import isodate
 
 from .const import FORDONSPOSITION_URL, USER_AGENT, __version__
-from .exceptions import SLAPI_Error, SLAPI_HTTP_Error
+from .exceptions import SLAPI_API_Error, SLAPI_Error, SLAPI_HTTP_Error
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,13 @@ class SLRoutePlanner31TripApi:
             raise SLAPI_Error(999, "Internal error", "jsonResponse is empty")
 
         if "Trip" not in jsonResponse:
-            logger.debug(jsonResponse)
+            if code := jsonResponse.get("StatusCode"):
+                if message := self.api_errors.get(code):
+                    raise SLAPI_API_Error(code, message)
+                else:
+                    raise SLAPI_API_Error(code, "Unknown error")
+
+            logger.warning(jsonResponse)
             raise SLAPI_Error(-100, "ResponseType not as expected")
 
         return jsonResponse
