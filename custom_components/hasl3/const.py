@@ -4,7 +4,7 @@ from enum import IntEnum
 
 from homeassistant.const import CONF_NAME, STATE_OFF, STATE_ON
 
-HASL_VERSION = "3.2.0b1"
+HASL_VERSION = "3.2.0b2"
 SCHEMA_VERSION = "5"
 DOMAIN = "hasl3"
 NAME = "Swedish Public Transport Sensor (HASL)"
