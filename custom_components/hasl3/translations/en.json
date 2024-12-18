@@ -87,7 +87,9 @@
         },
         "error": {
             "lookup_failed": "Failed to lookup location using given key. Check the key and try again.",
-            "only_one_status_sensor": "Only one Sensor of type Status is allowed"
+            "only_one_status_sensor": "Only one Sensor of type Status is allowed",
+            "invalid_siteid_or_coords": "Invalid siteid or coordinates",
+            "inconsistent_source_and_destination": "Inconsistent source and destination formats. Use either siteid or coordinates for both"
         }
     },
     "options": {

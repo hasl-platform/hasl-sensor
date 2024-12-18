@@ -24,22 +24,18 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
-from tsl.models.stops import LookupSiteId
 
 from .. import const
 from ..slapi import SLAPI_Error, SLRoutePlanner31TripApi
+from ..utils import siteid_or_coords
 from .device import SL_TRAFFIK_DEVICE_INFO
 
 logger = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        vol.Required(const.CONF_SOURCE): sel.NumberSelector(
-            sel.NumberSelectorConfig(min=0, mode=sel.NumberSelectorMode.BOX)
-        ),
-        vol.Required(const.CONF_DESTINATION): sel.NumberSelector(
-            sel.NumberSelectorConfig(min=0, mode=sel.NumberSelectorMode.BOX)
-        ),
+        vol.Required(const.CONF_SOURCE): str,
+        vol.Required(const.CONF_DESTINATION): str,
         vol.Optional(const.CONF_SENSOR): sel.EntitySelector(
             sel.EntitySelectorConfig(domain="binary_sensor")
         ),
@@ -84,12 +80,14 @@ class RouteDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         config_entry: ConfigEntry,
     ) -> None:
         self._api_key = config_entry.data[const.CONF_RP3_KEY]
-        self._from = LookupSiteId.from_siteid(
-            int(config_entry.options[const.CONF_SOURCE])
-        )
-        self._to = LookupSiteId.from_siteid(
-            int(config_entry.options[const.CONF_DESTINATION])
-        )
+
+        source: str = config_entry.options[const.CONF_SOURCE]
+        dest: str = config_entry.options[const.CONF_DESTINATION]
+        try:
+            self._lookup = siteid_or_coords(source, dest)
+        except* ValueError as exc:
+            raise ConfigEntryError("source-or-dest-invalid") from exc
+
         self._sensor_id: str | None = config_entry.options.get(const.CONF_SENSOR)
         interval = timedelta(seconds=config_entry.options[const.CONF_SCAN_INTERVAL])
 
@@ -125,7 +123,7 @@ class RouteDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         )
         async with timeout(10):
             try:
-                data = await client.request((self._from, self._to))
+                data = await client.request(self._lookup)
                 data = client.transform(data)
             except SLAPI_Error as error:
                 if error.code == 1002:

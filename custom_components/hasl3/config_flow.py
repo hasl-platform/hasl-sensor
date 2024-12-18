@@ -37,6 +37,7 @@ from .const import (
     SENSOR_ROUTE,
     SENSOR_STATUS,
 )
+from .utils import DestinationInvalid, SourceInvalid, siteid_or_coords
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,29 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             return self.async_show_form(step_id="config", data_schema=schema)
+
+        # validate user input
+        errors = {}
+        if type_ == SENSOR_ROUTE:
+            source = user_input[const.CONF_SOURCE]
+            dest = user_input[const.CONF_DESTINATION]
+
+            try:
+                siteid_or_coords(source, dest)
+            except* SourceInvalid:
+                errors[const.CONF_SOURCE] = "invalid_siteid_or_coords"
+            except* DestinationInvalid:
+                errors[const.CONF_DESTINATION] = "invalid_siteid_or_coords"
+            except* ValueError:
+                errors["base"] = "inconsistent_source_and_destination"
+
+        if errors:
+            schema = self.add_suggested_values_to_schema(schema, user_input)
+            return self.async_show_form(
+                step_id="config",
+                data_schema=schema,
+                errors=errors,
+            )
 
         data = {
             CONF_INTEGRATION_TYPE: type_,

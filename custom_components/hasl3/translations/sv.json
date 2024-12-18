@@ -83,7 +83,9 @@
         },
         "error": {
             "lookup_failed": "Misslyckades att hitta plats med angiven nyckel. Kontrollera nyckeln och försök igen.",
-            "only_one_status_sensor": "Det kan bara finnas en statussensor per plats. Välj en annan plats eller ta bort den befintliga statussensorn."
+            "only_one_status_sensor": "Det kan bara finnas en statussensor per plats. Välj en annan plats eller ta bort den befintliga statussensorn.",
+            "invalid_siteid_or_coords": "Ogiltigt plats id eller koordinater",
+            "inconsistent_source_and_destination": "Inkonsistent källa och destination. Använd antingen plats id eller koordinater för båda"
         }
     },
     "options": {
